@@ -73,7 +73,7 @@ app.post('/api/create-inspection', async (req, res) => {
   }
 });
 
-aapp.listen(PORT, '0.0.0.0', () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ Backend proxy server is running on port ${PORT}`);
 });
 
