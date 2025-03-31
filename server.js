@@ -22,22 +22,18 @@ app.use(express.json());
 app.post('/api/generate-token', async (req, res) => {
   try {
     const response = await axios.post('https://api.click-ins.com/oauth/token', {
-      client_secret: process.env.CLICKINS_API_KEY,
-      grant_type: 'client_credentials',
+      client_secret: process.env.CLIENT_SECRET, // ✅ use correct env variable
+      grant_type: process.env.GRANT_TYPE || 'client_credentials',
     }, {
       headers: {
         'Content-Type': 'application/json'
       }
     });
 
-    const token = response.data.access_token;
-    console.log('✅ Token generated:', token);
-    res.json({ token });
+    res.json({ token: response.data.access_token });
   } catch (error) {
     console.error('❌ Error generating token:', error.response?.data || error.message);
-    res.status(500).json({
-      error: error.response?.data || error.message
-    });
+    res.status(500).json({ error: error.response?.data || error.message });
   }
 });
 
