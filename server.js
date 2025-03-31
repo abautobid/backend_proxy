@@ -2,40 +2,57 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
+const qs = require('qs'); // required to stringify form-urlencoded
 
-const app = express(); // Define app here
+const app = express();
 
-// Read from environment variables
+// Environment variables
 const PORT = process.env.PORT || 3000;
 const CLIENT_SECRET = process.env.CLIENT_SECRET;
-const GRANT_TYPE = process.env.GRANT_TYPE;
+const GRANT_TYPE = process.env.GRANT_TYPE || 'client_credentials';
 
-// Enable CORS for your Angular app (http://localhost:4200)
+// CORS (Angular or WordPress frontend)
 app.use(cors({
   origin: 'http://localhost:4200'
 }));
 
-// Middleware to parse JSON bodies
+// Middleware
 app.use(express.json());
 
-// Node.js (Express) route example
+// Health check route
+app.get('/', (req, res) => {
+  res.send('✅ Click-Ins backend is live!');
+});
+
+// ✅ Fixed: Generate token using correct form-urlencoded flow
 app.post('/api/generate-token', async (req, res) => {
   try {
-    const response = await axios.post('https://api.click-ins.com/oauth/token', {
-      client_secret: process.env.CLIENT_SECRET, // ✅ use correct env variable
-      grant_type: process.env.GRANT_TYPE || 'client_credentials',
-    }, {
-      headers: {
-        'Content-Type': 'application/json'
-      }
+    const payload = qs.stringify({
+      grant_type: GRANT_TYPE,
+      client_secret: CLIENT_SECRET,
+      // Optional extras if needed:
+      // client_id: process.env.CLIENT_ID,
+      // client_inspector_name: 'Inspector001',
+      // client_process_id: 'PROCESS123'
     });
+
+    const response = await axios.post(
+      'https://api.click-ins.com/rest/v2/oauth2/token',
+      payload,
+      {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded'
+        }
+      }
+    );
 
     res.json({ token: response.data.access_token });
   } catch (error) {
-    console.error('❌ Error generating token:', error.response?.data || error.message);
+    console.error('❌ Token generation error:', error.response?.data || error.message);
     res.status(500).json({ error: error.response?.data || error.message });
   }
 });
+
 
 
 // New endpoint for creating an inspection case
