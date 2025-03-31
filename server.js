@@ -24,16 +24,12 @@ app.get('/', (req, res) => {
   res.send('✅ Click-Ins backend is live!');
 });
 
-// ✅ Fixed: Generate token using correct form-urlencoded flow
 app.post('/api/generate-token', async (req, res) => {
   try {
     const payload = qs.stringify({
       grant_type: GRANT_TYPE,
       client_secret: CLIENT_SECRET,
-      // Optional extras if needed:
-      // client_id: process.env.CLIENT_ID,
-      // client_inspector_name: 'Inspector001',
-      // client_process_id: 'PROCESS123'
+      // You can also include: client_id, client_inspector_name, etc.
     });
 
     const response = await axios.post(
@@ -46,12 +42,19 @@ app.post('/api/generate-token', async (req, res) => {
       }
     );
 
-    res.json({ token: response.data.access_token });
+    const { access_token, token_type, expires_in } = response.data;
+
+    res.json({
+      token: access_token,
+      token_type,
+      expires_in
+    });
   } catch (error) {
     console.error('❌ Token generation error:', error.response?.data || error.message);
     res.status(500).json({ error: error.response?.data || error.message });
   }
 });
+
 
 
 
