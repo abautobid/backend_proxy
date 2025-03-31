@@ -19,19 +19,26 @@ app.use(cors({
 app.use(express.json());
 
 // Node.js (Express) route example
-app.get('/api/generate-token', async (req, res) => {
-  const response = await fetch('https://api.click-ins.com/oauth/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
+app.post('/api/generate-token', async (req, res) => {
+  try {
+    const response = await axios.post('https://api.click-ins.com/oauth/token', {
       client_secret: process.env.CLICKINS_API_KEY,
       grant_type: 'client_credentials',
-      // Optional: callback_headers.additional_parameters, etc.
-    }),
-  });
+    }, {
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
 
-  const data = await response.json();
-  res.json({ token: data.access_token });
+    const token = response.data.access_token;
+    console.log('✅ Token generated:', token);
+    res.json({ token });
+  } catch (error) {
+    console.error('❌ Error generating token:', error.response?.data || error.message);
+    res.status(500).json({
+      error: error.response?.data || error.message
+    });
+  }
 });
 
 
