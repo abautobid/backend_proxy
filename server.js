@@ -5,7 +5,7 @@ const axios = require('axios');
 const qs = require('qs'); // required to stringify form-urlencoded
 
 const app = express();
-
+const { v4: uuidv4 } = require('uuid'); // add this at the top of server.js
 // Environment variables
 const PORT = process.env.PORT || 3000;
 const CLIENT_SECRET = process.env.CLIENT_SECRET;
@@ -106,6 +106,8 @@ app.post('/api/create-inspection', async (req, res) => {
       return res.status(error.response.status).json({ error: error.response.data });
     } else {
       console.error('Error creating inspection:', error.message);
+      console.log('📤 Sending to:', 'https://api.click-ins.com/rest/v2/link');
+
       return res.status(500).json({ error: error.message });
     }
   }
@@ -114,4 +116,3 @@ app.post('/api/create-inspection', async (req, res) => {
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ Backend proxy server is running on port ${PORT}`);
 });
-
