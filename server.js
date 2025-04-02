@@ -13,7 +13,7 @@ const GRANT_TYPE = process.env.GRANT_TYPE || 'client_credentials';
 
 // CORS (Angular or WordPress frontend)
 app.use(cors({
-  origin: 'http://localhost:4200'
+  origin: ['http://localhost:4200', 'https://24aba.com']
 }));
 
 // Middleware
