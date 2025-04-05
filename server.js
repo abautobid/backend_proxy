@@ -34,9 +34,9 @@ app.post('/api/generate-token-and-link', async (req, res) => {
       client_secret: CLIENT_SECRET,
       client_process_id: `PROCESS-${uniqueId}`,
       client_inspector_name: `INSPECTOR-${uniqueId}`,
-      redirect_url: 'https://24aba.com/inspection/thank-you',
-      fail_url: 'https://24aba.com/inspection/error',
-      unauthorized_url: 'https://24aba.com/inspection/unauthorized',
+      redirect_url: 'https://24aba.com/?inspection=success',
+fail_url: 'https://24aba.com/?inspection=fail',
+unauthorized_url: 'https://24aba.com/?inspection=unauthorized',
       branch: 'Main Branch'
     });
 
