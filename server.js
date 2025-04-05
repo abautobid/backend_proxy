@@ -13,7 +13,9 @@ const CLIENT_SECRET = process.env.CLIENT_SECRET;
 const GRANT_TYPE = process.env.GRANT_TYPE || 'client_credentials';
 
 app.use(cors({
-  origin: ['http://localhost:4200', 'https://24aba.com/']
+  origin: ['http://localhost:4200', 'https://24aba.com'],
+  methods: ['GET', 'POST'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 app.use(express.json());
