@@ -14,9 +14,11 @@ const GRANT_TYPE = process.env.GRANT_TYPE || 'client_credentials';
 
 app.use(cors({
   origin: ['http://localhost:4200', 'https://24aba.com'],
-  methods: ['GET', 'POST'],
+  methods: ['GET', 'POST', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
+
+app.options('*', cors());
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -34,9 +36,9 @@ app.post('/api/generate-token-and-link', async (req, res) => {
       client_secret: CLIENT_SECRET,
       client_process_id: `PROCESS-${uniqueId}`,
       client_inspector_name: `INSPECTOR-${uniqueId}`,
-      redirect_url: 'https://24aba.com/?inspection=success',
-fail_url: 'https://24aba.com/?inspection=fail',
-unauthorized_url: 'https://24aba.com/?inspection=unauthorized',
+      redirect_url: 'https://24aba.com/inspection/inspect-car/thank-you',
+      fail_url: 'https://24aba.com/inspection/inspect-car/error',
+      unauthorized_url: 'https://24aba.com/inspection/inspect-car/unauthorized',
       branch: 'Main Branch'
     });
 
@@ -102,24 +104,32 @@ app.post('/api/clickins-callback', async (req, res) => {
       }
     });
 
-    const reportId = reportData.report_html_filename?.replace('.html', '');
-    const reportUrl = reportId
-      ? `https://app.click-ins.com/html-reports/${reportId}.html`
-      : 'Not provided';
-
     const mailOptions = {
       from: `"Click-Ins Bot" <${process.env.EMAIL_USER}>`,
       to: 'inspection@24aba.com',
       subject: '📄 New Click-Ins Inspection Report Received',
-      text: `A new inspection report was received.\n\nInspection ID: ${reportData.inspection_id || 'N/A'}\n\nReport Link: ${reportUrl}\n\nFull JSON:\n${JSON.stringify(reportData, null, 2)}`
+      text: `Inspection ID: ${reportData.inspection_id || 'N/A'}\n\nFull JSON:\n${JSON.stringify(reportData, null, 2)}`,
+      attachments: []
     };
+
+    if (reportData.report_html_filename) {
+      const reportId = reportData.report_html_filename.replace('.html', '');
+      const reportUrl = `https://app.click-ins.com/html-reports/${reportId}.html`;
+
+      mailOptions.attachments.push({
+        filename: `inspection-${reportId}.html`,
+        path: reportUrl
+      });
+
+      mailOptions.text += `\n\nView Report Online: ${reportUrl}`;
+    }
 
     await transporter.sendMail(mailOptions);
 
     res.status(200).json({ message: '✅ Report received and emailed successfully.' });
   } catch (error) {
-    console.error('❌ Failed to send email:', error);
-    res.status(500).json({ error: error.message || 'Email send failed' });
+    console.error('❌ Failed to send email:', error.message);
+    res.status(500).json({ error: 'Failed to forward report via email.' });
   }
 });
 
