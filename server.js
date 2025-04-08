@@ -12,6 +12,9 @@ const PORT = process.env.PORT || 3000;
 const CLIENT_SECRET = process.env.CLIENT_SECRET;
 const GRANT_TYPE = process.env.GRANT_TYPE || 'client_credentials';
 
+// Temporary in-memory store (consider replacing with DB later)
+const inspectionEmails = {};
+
 app.use(cors({
   origin: ['http://localhost:4200', 'https://24aba.com'],
   methods: ['GET', 'POST', 'OPTIONS'],
@@ -30,11 +33,20 @@ app.get('/', (req, res) => {
 app.post('/api/generate-token-and-link', async (req, res) => {
   try {
     const uniqueId = uuidv4();
+    const clientProcessId = `PROCESS-${uniqueId}`;
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ error: "Email is required" });
+    }
+
+    // Store the email using the generated client_process_id
+    inspectionEmails[clientProcessId] = email;
 
     const payload = qs.stringify({
       grant_type: GRANT_TYPE,
       client_secret: CLIENT_SECRET,
-      client_process_id: `PROCESS-${uniqueId}`,
+      client_process_id: clientProcessId,
       client_inspector_name: `INSPECTOR-${uniqueId}`,
       redirect_url: 'https://24aba.com/inspection/inspect-car/thank-you',
       fail_url: 'https://24aba.com/inspection/inspect-car/error',
@@ -50,7 +62,13 @@ app.post('/api/generate-token-and-link', async (req, res) => {
 
     const { access_token, token_type, expires_in, short_link } = shortLinkResponse.data;
 
-    res.json({ token: access_token, token_type, expires_in, short_link });
+    res.json({
+      token: access_token,
+      token_type,
+      expires_in,
+      short_link,
+      client_process_id: clientProcessId // return for optional debugging
+    });
   } catch (error) {
     console.error('❌ Short link error:', error.response?.data || error.message);
     res.status(500).json({ error: error.response?.data || error.message });
@@ -94,6 +112,10 @@ app.post('/api/clickins-callback', async (req, res) => {
   console.log('📥 Received Click-Ins callback:', JSON.stringify(reportData, null, 2));
 
   try {
+    // Try to get the original user email from our in-memory store
+    const userEmail = inspectionEmails[reportData.client_process_id];
+    const fallbackEmail = 'inspection@24aba.com';
+
     const transporter = nodemailer.createTransport({
       host: process.env.SMTP_HOST,
       port: parseInt(process.env.SMTP_PORT),
@@ -106,7 +128,7 @@ app.post('/api/clickins-callback', async (req, res) => {
 
     const mailOptions = {
       from: `"Click-Ins Bot" <${process.env.EMAIL_USER}>`,
-      to: 'inspection@24aba.com',
+      to: userEmail || fallbackEmail,
       subject: '📄 New Click-Ins Inspection Report Received',
       text: `Inspection ID: ${reportData.inspection_id || 'N/A'}\n\nFull JSON:\n${JSON.stringify(reportData, null, 2)}`,
       attachments: []
