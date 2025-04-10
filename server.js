@@ -189,7 +189,9 @@ app.post('/api/mailchimp-subscribe', async (req, res) => {
       return res.status(400).json({ error: result.detail || "Mailchimp API error" });
     }
 
+
     res.status(200).json({ message: "✅ Successfully subscribed to 24ABA!" });
+
   } catch (error) {
     console.error("❌ Mailchimp Error:", error.message);
     res.status(500).json({ error: "Internal Server Error" });
