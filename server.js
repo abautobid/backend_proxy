@@ -147,6 +147,56 @@ app.post('/api/clickins-callback', async (req, res) => {
   }
 });
 
+app.post('/api/mailchimp-subscribe', async (req, res) => {
+  const { email, firstName, lastName, dealershipName, phone, inventorySize } = req.body;
+
+  if (!email) {
+    return res.status(400).json({ error: 'Email is required' });
+  }
+
+  const data = {
+    email_address: email,
+    status: "subscribed",
+    merge_fields: {
+      FNAME: firstName || '',
+      LNAME: lastName || '',
+      DEALER: dealershipName || '',
+      PHONE: phone || '',
+      INVSIZE: inventorySize || ''
+    }
+  };
+
+  const apiKey = process.env.MAILCHIMP_API_KEY;
+  const audienceId = process.env.MAILCHIMP_AUDIENCE_ID;
+  const dc = process.env.MAILCHIMP_DC;
+
+  const url = `https://${dc}.api.mailchimp.com/3.0/lists/${audienceId}/members`;
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `apikey ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(data)
+    });
+
+    const result = await response.json();
+
+    if (response.status >= 400) {
+      console.error("Mailchimp Error:", result);
+      return res.status(400).json({ error: result.detail || "Mailchimp API error" });
+    }
+
+    res.status(200).json({ message: "✅ Successfully subscribed to Mailchimp!" });
+  } catch (error) {
+    console.error("❌ Mailchimp Error:", error.message);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ Backend proxy server is running on port ${PORT}`);
 });
