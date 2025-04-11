@@ -16,7 +16,9 @@ const GRANT_TYPE = process.env.GRANT_TYPE || 'client_credentials';
 const inspectionEmails = {};
 
 app.use(cors({
-  origin: ['http://localhost:4200', 'https://24aba.com'],
+  origin: ['http://localhost:3000', 'http://localhost:4200', 'https://24aba.com'],
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type'],
 }));
 
 app.use(express.json());
