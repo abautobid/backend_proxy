@@ -15,11 +15,16 @@ const GRANT_TYPE = process.env.GRANT_TYPE || 'client_credentials';
 // ✅ In-memory store for email mapping (TEMPORARY)
 const inspectionEmails = {};
 
-app.use(cors({
+const corsOptions = {
   origin: ['http://localhost:3000', 'http://localhost:4200', 'https://24aba.com'],
   methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type'],
-}));
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true,
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions)); // handle preflight
+
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
