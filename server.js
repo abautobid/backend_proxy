@@ -180,7 +180,7 @@ app.post('/api/create-payment-session', async (req, res) => {
           price_data: {
             currency: 'eur',
             product_data: { name: 'Car Inspection (AI Report)' },
-            unit_amount: 100,
+            unit_amount: 1000,
           },
           quantity: 1,
         },
