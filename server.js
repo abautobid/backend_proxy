@@ -5,10 +5,6 @@ const axios = require('axios');
 const qs = require('qs');
 const nodemailer = require('nodemailer');
 const { v4: uuidv4 } = require('uuid');
-const Stripe = require("stripe");
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-  apiVersion: "2022-11-15",
-});
 
 
 const app = express();
