@@ -5,6 +5,11 @@ const axios = require('axios');
 const qs = require('qs');
 const nodemailer = require('nodemailer');
 const { v4: uuidv4 } = require('uuid');
+const Stripe = require("stripe");
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
+  apiVersion: "2022-11-15",
+});
+
 
 const app = express();
 
@@ -15,15 +20,10 @@ const GRANT_TYPE = process.env.GRANT_TYPE || 'client_credentials';
 // ✅ In-memory store for email mapping (TEMPORARY)
 const inspectionEmails = {};
 
-const corsOptions = {
-  origin: ['http://localhost:3000', 'http://localhost:4200', 'https://24aba.com'],
-  methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true,
-};
+app.use(cors({
+origin: ['http://localhost:4200', 'https://24aba.com'],
+}));
 
-app.use(cors(corsOptions));
-app.options('*', cors(corsOptions)); // handle preflight
 
 
 app.use(express.json());
@@ -202,6 +202,25 @@ app.post('/api/mailchimp-subscribe', async (req, res) => {
   } catch (error) {
     console.error("❌ Mailchimp Error:", error.message);
     res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+app.post("/api/create-payment-intent", async (req, res) => {
+  try {
+    const amount = 1000; // ✅ Hardcoded to $10.00 (1000 cents)
+
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount,
+      currency: "usd",
+      automatic_payment_methods: { enabled: true },
+    });
+
+    res.send({
+      clientSecret: paymentIntent.client_secret,
+    });
+  } catch (err) {
+    console.error("Stripe error:", err.message);
+    res.status(500).json({ error: err.message });
   }
 });
 
