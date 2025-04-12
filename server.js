@@ -5,10 +5,11 @@ const axios = require('axios');
 const qs = require('qs');
 const nodemailer = require('nodemailer');
 const { v4: uuidv4 } = require('uuid');
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
 
 const app = express();
-
+const { access_token, token_type, expires_in, short_link } = shortLinkResponse.data;
 const PORT = process.env.PORT || 3000;
 const CLIENT_SECRET = process.env.CLIENT_SECRET;
 const GRANT_TYPE = process.env.GRANT_TYPE || 'client_credentials';
@@ -108,8 +109,9 @@ app.post('/api/clickins-callback', async (req, res) => {
   try {
     const clientProcessId = reportData.client_process_id;
     const userEmail = inspectionEmails[clientProcessId];
-
     const recipient = userEmail || 'inspection@24aba.com'; // fallback if not found
+
+    const short_link = `https://app.click-ins.com/html-reports/${reportData.report_html_filename?.replace('.html', '')}.html`;
 
     const transporter = nodemailer.createTransport({
       host: process.env.SMTP_HOST,
@@ -122,33 +124,35 @@ app.post('/api/clickins-callback', async (req, res) => {
     });
 
     const mailOptions = {
-      from: `"Click-Ins Bot" <${process.env.EMAIL_USER}>`,
+      from: `"24ABA Inspections" <${process.env.EMAIL_USER}>`,
       to: recipient,
-      subject: '📄 New Click-Ins Inspection Report Received',
-      text: `Inspection ID: ${reportData.inspection_id || 'N/A'}\n\nFull JSON:\n${JSON.stringify(reportData, null, 2)}`,
-      attachments: []
+      subject: "🚗 Your Inspection Link is Ready!",
+      html: `
+        <p>Hello,</p>
+        <p>Thank you for completing your payment!</p>
+        <p>Your car inspection report is now ready. Click the button below to view it:</p>
+        <p style="text-align:center;">
+          <a href="${short_link}" style="display:inline-block;padding:12px 24px;background-color:#e60023;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:bold;">
+            📄 View Report
+          </a>
+        </p>
+        <p>If the button doesn't work, you can also click or paste this link:</p>
+        <p><a href="${short_link}">${short_link}</a></p>
+        <p>– 24ABA Team</p>
+      `
     };
 
-    if (reportData.report_html_filename) {
-      const reportId = reportData.report_html_filename.replace('.html', '');
-      const reportUrl = `https://app.click-ins.com/html-reports/${reportId}.html`;
-
-      mailOptions.attachments.push({
-        filename: `inspection-${reportId}.html`,
-        path: reportUrl
-      });
-
-      mailOptions.text += `\n\nView Report Online: ${reportUrl}`;
-    }
-
     await transporter.sendMail(mailOptions);
+    console.log("📧 Inspection report email sent to", recipient);
 
-    res.status(200).json({ message: `✅ Report sent to ${recipient}` });
+    res.status(200).json({ message: `✅ Report and email sent to ${recipient}` });
+
   } catch (error) {
-    console.error('❌ Failed to send email:', error.message);
-    res.status(500).json({ error: 'Failed to forward report via email.' });
+    console.error('❌ Failed to process Click-Ins callback or send email:', error.message);
+    res.status(500).json({ error: 'Failed to handle inspection callback or send email.' });
   }
 });
+
 
 app.post('/api/mailchimp-subscribe', async (req, res) => {
   const { email, firstName, lastName, dealershipName, phone, inventorySize } = req.body;
@@ -201,6 +205,45 @@ app.post('/api/mailchimp-subscribe', async (req, res) => {
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
+
+app.post('/api/create-payment-session', async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ error: "Email is required" });
+    }
+
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ['card'],
+      line_items: [
+        {
+          price_data: {
+            currency: 'eur',
+            product_data: {
+              name: 'Car Inspection (AI Report)',
+            },
+            unit_amount: 100, // ✅ €1.00 in cents
+          },
+          quantity: 1,
+        },
+      ],
+      mode: 'payment',
+      customer_email: email,
+      success_url: `https://24aba.com/inspection/after-payment?email=${encodeURIComponent(email)}`,
+      cancel_url: 'https://24aba.com/inspection/payment-cancelled',
+    });
+
+    return res.status(200).json({
+      sessionId: session.id,
+      url: session.url
+    });
+  } catch (err) {
+    console.error("Stripe Error:", err.message);
+    res.status(500).json({ error: "Could not create Stripe session" });
+  }
+});
+
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ Backend proxy server is running on port ${PORT}`);
