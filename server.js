@@ -206,44 +206,6 @@ app.post('/api/mailchimp-subscribe', async (req, res) => {
   }
 });
 
-app.post("/api/create-payment-intent", async (req, res) => {
-  try {
-    const amount = 1000; // ✅ Hardcoded to $10.00 (1000 cents)
-
-    const paymentIntent = await stripe.paymentIntents.create({
-      amount,
-      currency: "usd",
-      automatic_payment_methods: { enabled: true },
-    });
-
-    res.send({
-      clientSecret: paymentIntent.client_secret,
-    });
-  } catch (err) {
-    console.error("Stripe error:", err.message);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.post("/api/create-payment-intent", async (req, res) => {
-  try {
-    const { amount } = req.body;
-
-    const paymentIntent = await stripe.paymentIntents.create({
-      amount, // Amount in cents: e.g. 1000 = $10.00
-      currency: "usd",
-      automatic_payment_methods: { enabled: true },
-    });
-
-    res.send({
-      clientSecret: paymentIntent.client_secret,
-    });
-  } catch (err) {
-    console.error("Stripe error:", err.message);
-    res.status(500).json({ error: err.message });
-  }
-});
-
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ Backend proxy server is running on port ${PORT}`);
 });
