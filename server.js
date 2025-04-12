@@ -150,19 +150,20 @@ app.post('/api/clickins-callback', async (req, res) => {
 app.post('/api/mailchimp-subscribe', async (req, res) => {
   const { email, firstName, lastName, dealershipName, phone, inventorySize } = req.body;
 
-  if (!email) {
-    return res.status(400).json({ error: 'Email is required' });
+  // ✅ Require all fields
+  if (!email || !firstName || !lastName || !dealershipName || !phone || !inventorySize) {
+    return res.status(400).json({ error: 'All fields are required.' });
   }
 
   const data = {
     email_address: email,
     status: "subscribed",
     merge_fields: {
-      FNAME: firstName || '',
-      LNAME: lastName || '',
-      DEALER: dealershipName || '',
-      PHONE: phone || '',
-      INVSIZE: inventorySize || ''
+      FNAME: firstName,
+      LNAME: lastName,
+      DEALER: dealershipName,
+      PHONE: phone,
+      INVSIZE: inventorySize
     }
   };
 
@@ -198,6 +199,24 @@ app.post('/api/mailchimp-subscribe', async (req, res) => {
   }
 });
 
+app.post("/api/create-payment-intent", async (req, res) => {
+  try {
+    const { amount } = req.body;
+
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount, // Amount in cents: e.g. 1000 = $10.00
+      currency: "usd",
+      automatic_payment_methods: { enabled: true },
+    });
+
+    res.send({
+      clientSecret: paymentIntent.client_secret,
+    });
+  } catch (err) {
+    console.error("Stripe error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ Backend proxy server is running on port ${PORT}`);
