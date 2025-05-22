@@ -410,7 +410,7 @@ async function getCebiaBasicInfo(queueId, cebiaToken) {
         return baseInfoData;
       }
 
-      //await delay(3000); // wait 3 seconds before next try
+      await delay(3000); // wait 3 seconds before next try
     }
 
     return false;
