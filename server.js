@@ -36,7 +36,7 @@ const CLICK_INS_URL = process.env.CLICK_INS_URL;
 const inspectionEmails = {};
 
 app.use(cors({
-  origin: ['http://localhost:3001', 'https://24aba.com'],
+  origin: ['http://localhost:3000','http://localhost:3001', 'https://24aba.com'],
 }));
 
 app.use(express.json());
