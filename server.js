@@ -12,6 +12,13 @@ const multer = require('multer');
 const fs = require('fs');
 const FormData = require('form-data');
 
+const fleetManager = require('./routes/fleetManager');
+const reseller = require('./routes/reseller');
+
+const { saveInspection,getResellerByReferralCode } = require('./utility/supabaseUtility');
+const { supabase } = require('./lib/supabaseClient.js');
+
+
 const router = express.Router();
 
 // Set up multer to store files temporarily
@@ -31,7 +38,7 @@ const CLICK_INS_CLIENT_ID = process.env.CLICK_INS_CLIENT_ID;
 const CLICK_INS_API_KEY = process.env.CLICK_INS_API_KEY;
 const CLICK_INS_URL = process.env.CLICK_INS_URL;
 
-
+const CEBIA_API_URL = process.env.CEBIA_API_URL;
 
 const inspectionEmails = {};
 
@@ -41,6 +48,10 @@ app.use(cors({
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+app.use('/api/fleet', fleetManager);
+app.use('/api/reseller', reseller);
+
 
 app.get('/', (req, res) => {
   res.send('✅ Click-Ins backend is live!');
@@ -191,22 +202,35 @@ app.post('/api/clickins-callback', async (req, res) => {
 
 app.post('/api/create-payment-session', async (req, res) => {
   try {
-    const { email, vin } = req.body;
-    
+    const { email, vin} = req.body;
+
+
+
     if (!email) return res.status(400).json({ error: "Email is required" });
     if (!vin) return res.status(400).json({ error: "VIN is required" });
-    const clickInsToken = await getClickInsToken();
-    
 
+
+ 
+
+    const clickInsToken = await getClickInsToken();
     const inspectionData = await createClickInsInspection(clickInsToken);
     const InspectionId = inspectionData.inspection_case_id;
-    
-
-
+  
     const cebiaToken = await getCebiaToken();
     
     const cebiaQueue = await getCebiaBasicInfoQueueId(vin,cebiaToken);
-    
+
+      const inspectionObj = {
+          plate_number: vin,
+          email : email,
+          queue_id: cebiaQueue,
+          status: 'pending',
+          user_id : null,
+          inspection_case_id: InspectionId,
+          reseller_id : null,
+      };
+      await saveInspection(inspectionObj)
+
     
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
@@ -250,7 +274,7 @@ app.get("/api/cebia/poll/:vin", async (req, res) => {
       console.log(`🔁 Poll attempt ${attempt} for VIN: ${vin}`);
 
       const response = await axios.get(
-        `https://app.cebia.com/api/Autotracer/v1/CreateBaseInfoQuery/${vin}`,
+        `${CEBIA_API_URL}CreateBaseInfoQuery/${vin}`,
         {
           headers: {
             Accept: "application/json",
@@ -287,7 +311,7 @@ app.get("/api/report/:queueId", async (req, res) => {
 
   try {
     const response = await axios.get(
-      `https://app.cebia.com/api/Autotracer/v1/GetPayedDataQuery/${queueId}`,
+      `${CEBIA_API_URL}GetPayedDataQuery/${queueId}`,
       {
         headers: {
           Accept: "application/json",
@@ -315,7 +339,7 @@ app.get("/api/report/:queueId", async (req, res) => {
 async function getCebiaToken() {
   
   const tokenResponse = await axios.post(
-    "https://www.cebianet.cz/pub/oauth/token", // ✅ CORRECT endpoint
+    process.env.CEBIA_AUTH_URL, // ✅ CORRECT endpoint
     qs.stringify({
       grant_type: "password",
       username: process.env.CEBIA_USERNAME,
@@ -348,7 +372,7 @@ async function getCebiaBasicInfoQueueId(vin, cebiaToken) {
       console.log(`🔁 Poll attempt ${attempt} for VIN: ${vin}`);
 
       const response = await axios.get(
-        `https://app.cebia.com/api/Autotracer/v1/CreateBaseInfoQuery/${vin}`,
+        `${CEBIA_API_URL}CreateBaseInfoQuery/${vin}`,
         {
           headers: {
             Accept: "application/json",
@@ -393,7 +417,7 @@ async function getCebiaBasicInfo(queueId, cebiaToken) {
       console.log(`🔁 Poll attempt ${attempt} for queueId: ${queueId}`);
 
       const response = await axios.get(
-        `https://app.cebia.com/api/Autotracer/v1/GetBaseInfoQuery/${queueId}`,
+        `${CEBIA_API_URL}GetBaseInfoQuery/${queueId}`,
         {
           headers: {
             Accept: "application/json",
@@ -718,6 +742,37 @@ app.post('/api/email-report', async (req, res) => {
     console.error('❌ Short link error:', error.response?.data || error.message);
     res.status(500).json({ error: error.response?.data || error.message });
   }
+});
+
+
+
+app.post('/api/login', async (req, res) => {
+  const { email, password } = req.body;
+  if (!email || !password) {
+    return res.status(400).json({ error: 'Email and password are required' });
+  }
+
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+
+  if (error) {
+    return res.status(401).json({ error: error.message });
+  }
+
+  return res.status(200).json({
+    message: 'Login successful',
+    access_token: data.session.access_token,
+    user: data.user,
+  });
+});
+
+
+
+
+app.get('/api/create-auth', async (req, res) => {
+  const email = 'reseller@gmail.com';
+  const password = 'test1234';
+  const { data, error } = await supabase.auth.signUp({ email, password });
+   return res.status(200).json({ data});
 });
 
 
