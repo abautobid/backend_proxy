@@ -31,6 +31,10 @@ const CLICK_INS_CLIENT_ID = process.env.CLICK_INS_CLIENT_ID;
 const CLICK_INS_API_KEY = process.env.CLICK_INS_API_KEY;
 const CLICK_INS_URL = process.env.CLICK_INS_URL;
 
+const CEBIA_AUTH_URL = process.env.CEBIA_AUTH_URL;
+const CEBIA_API_URL = process.env.CEBIA_API_URL;
+
+
 
 
 const inspectionEmails = {};
@@ -228,7 +232,7 @@ app.post('/api/create-payment-session', async (req, res) => {
 
     return res.status(200).json({ sessionId: session.id, url: session.url });
   } catch (err) {
-    console.error("Stripe Error:", err.message);
+    console.error("Stripe Error:", err);
     res.status(500).json({ error: "Could not create Stripe session" });
   }
 });
@@ -250,7 +254,7 @@ app.get("/api/cebia/poll/:vin", async (req, res) => {
       console.log(`🔁 Poll attempt ${attempt} for VIN: ${vin}`);
 
       const response = await axios.get(
-        `https://app.cebia.com/api/Autotracer/v1/CreateBaseInfoQuery/${vin}`,
+        `${CEBIA_API_URL}CreateBaseInfoQuery/${vin}`,
         {
           headers: {
             Accept: "application/json",
@@ -287,7 +291,7 @@ app.get("/api/report/:queueId", async (req, res) => {
 
   try {
     const response = await axios.get(
-      `https://app.cebia.com/api/Autotracer/v1/GetPayedDataQuery/${queueId}`,
+      `${CEBIA_API_URL}GetPayedDataQuery/${queueId}`,
       {
         headers: {
           Accept: "application/json",
@@ -315,7 +319,7 @@ app.get("/api/report/:queueId", async (req, res) => {
 async function getCebiaToken() {
   
   const tokenResponse = await axios.post(
-    "https://www.cebianet.cz/pub/oauth/token", // ✅ CORRECT endpoint
+    CEBIA_AUTH_URL, // ✅ CORRECT endpoint
     qs.stringify({
       grant_type: "password",
       username: process.env.CEBIA_USERNAME,
@@ -348,7 +352,7 @@ async function getCebiaBasicInfoQueueId(vin, cebiaToken) {
       console.log(`🔁 Poll attempt ${attempt} for VIN: ${vin}`);
 
       const response = await axios.get(
-        `https://app.cebia.com/api/Autotracer/v1/CreateBaseInfoQuery/${vin}`,
+        `${CEBIA_API_URL}CreateBaseInfoQuery/${vin}`,
         {
           headers: {
             Accept: "application/json",
@@ -393,7 +397,7 @@ async function getCebiaBasicInfo(queueId, cebiaToken) {
       console.log(`🔁 Poll attempt ${attempt} for queueId: ${queueId}`);
 
       const response = await axios.get(
-        `https://app.cebia.com/api/Autotracer/v1/GetBaseInfoQuery/${queueId}`,
+        `${CEBIA_API_URL}GetBaseInfoQuery/${queueId}`,
         {
           headers: {
             Accept: "application/json",
