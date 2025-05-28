@@ -1,6 +1,6 @@
 // Removed incorrect import of req
 const { getCebiaToken, getCebiaBasicInfoQueueId, getPayedDataQuery } = require('../utility/cebiaUtility');
-const { saveInspection, getInspectionList, getTotalInspectionsByReseller, getMonthlyInspections, getUserByEmail, getInspectionsByPlateAndEmail,getCommissionSummaryByPeriods } = require('../utility/supabaseUtility');
+const { saveInspection, getInspectionList, getTotalInspectionsByReseller, getMonthlyInspections, getUserByEmail, getInspectionsByPlateAndEmail,getCommissionSummaryByPeriods, getUserById} = require('../utility/supabaseUtility');
 const crypto = require('crypto');
 
 
@@ -110,6 +110,7 @@ const getSummary = async (req, res) => {
             date: new Date(item.created_at).toISOString().split("T")[0], // or formatted date
             status: item.status, // you define this mapping
             commission: item.commission || 0,
+            cebia_coupon_number: item.cebia_coupon_number || 0,
            }));
 
         return res.status(200).json({
@@ -149,7 +150,7 @@ const remainingCredits = async (req, res) => {
 }
 
 const profileInfo = async (req, res) => {
-    const userId = req.params.userId;
+    const userId = req.user.id;
     if (!userId) {
         return res.status(400).json({ error: "userId is required" });
     }

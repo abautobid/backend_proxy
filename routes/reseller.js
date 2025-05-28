@@ -7,7 +7,7 @@ const authMiddleware = require('../middleware/authMiddleware'); // adjust path i
 router.get('/inspection-list', getInspection);
 router.get('/summary',authMiddleware, getSummary);
 router.get('/remainingCredits', remainingCredits);
-router.get('/profileInfo/:userId', profileInfo);
+router.get('/profile', authMiddleware, profileInfo);
 router.post('/create-inspect',authMiddleware, createInspect);
 
 module.exports = router;

@@ -186,6 +186,20 @@ async function getUserByEmail(email) {
     return user;
 }
 
+async function getUserById(id) {
+    const { data: user, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', id)
+        .single();
+    console.log('User:', user);
+    if (error) {
+        console.error('Error fetching user by ID:', error);
+        throw new Error('Error fetching user by ID from Supabase');
+    }
+    return user;
+}
+
 async function getResellerByReferralCode(referralCode) {
     const { data: user, error } = await supabase
         .from('users')
@@ -208,5 +222,6 @@ module.exports = {
     getInspectionsByPlateAndEmail,
     getTotalInspectionsByReseller,
     getCommissionSummaryByPeriods,
-    getResellerByReferralCode
+    getResellerByReferralCode,
+    getUserById
 };

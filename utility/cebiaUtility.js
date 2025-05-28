@@ -83,28 +83,36 @@ async function getCebiaBasicInfoQueueId(vin, cebiaToken) {
 
 
 async function getPayedDataQuery(queueId, cebiaToken) {
-  
-  try {
-    const response = await axios.get(
-      `${CEBIA_API_URL}GetPayedDataQuery/${queueId}`,
-      {
-        headers: {
-          Accept: "application/json",
-          Authorization: `Bearer ${cebiaToken}`,
-        },
-      }
-    );
-    console.log(response.data)
-    const { couponNumber } = response.data;
 
-    if (couponNumber) {
-      console.log("Coupan Number "+couponNumber);
-      return couponNumber; 
+  
+  const maxRetries = 10;
+  const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+  try {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        console.log(`🔁 Poll attempt ${attempt} for VIN: ${queueId}`);
+
+        const response = await axios.get(
+          `${CEBIA_API_URL}GetPayedDataQuery/${queueId}`,
+          {
+            headers: {
+              Accept: "application/json",
+              Authorization: `Bearer ${cebiaToken}`,
+            },
+          }
+        );
+        console.log(response.data)
+        const { couponNumber } = response.data;
+
+        if (couponNumber) {
+          console.log("Coupan Number "+couponNumber);
+          return couponNumber; 
+        }    
     }
-    console.log(err);
+
     return false;
   } catch (err) {
-    console.log(err);
+    console.error("❌ Polling error:", err.response?.data || err.message);
     return false;
   }
 };
