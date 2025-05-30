@@ -83,39 +83,41 @@ async function getCebiaBasicInfoQueueId(vin, cebiaToken) {
 
 
 async function getPayedDataQuery(queueId, cebiaToken) {
-
-  
   const maxRetries = 10;
   const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
-  try {
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-        console.log(`🔁 Poll attempt ${attempt} for VIN: ${queueId}`);
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    console.log(`🔁 Poll attempt ${attempt} for queue: ${queueId}`);
 
-        const response = await axios.get(
-          `${CEBIA_API_URL}GetPayedDataQuery/${queueId}`,
-          {
-            headers: {
-              Accept: "application/json",
-              Authorization: `Bearer ${cebiaToken}`,
-            },
-          }
-        );
-        console.log(response.data)
-        const { couponNumber } = response.data;
+    try {
+      const response = await axios.get(
+        `${CEBIA_API_URL}GetPayedDataQuery/${queueId}`,
+        {
+          headers: {
+            Accept: "application/json",
+            Authorization: `Bearer ${cebiaToken}`,
+          },
+        }
+      );
 
-        if (couponNumber) {
-          console.log("Coupan Number "+couponNumber);
-          return couponNumber; 
-        }    
+      const { couponNumber } = response.data;
+
+      if (couponNumber) {
+        console.log("🎉 Coupon Number: " + couponNumber);
+        return couponNumber;
+      }
+    } catch (err) {
+      console.error("❌ Polling error:", err.response?.data || err.message);
     }
 
-    return false;
-  } catch (err) {
-    console.error("❌ Polling error:", err.response?.data || err.message);
-    return false;
+    // Wait before retrying
+    await delay(2000); // waits 2 seconds before next attempt
   }
+
+  console.warn("⚠️ Max retries reached. No coupon number received.");
+  return false;
 };
+
 
 
 

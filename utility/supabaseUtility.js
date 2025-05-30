@@ -20,16 +20,44 @@ async function saveInspection(inspectionObj) {
                 cebia_coupon_number : inspectionObj.cebia_coupon_number,
                 commission : inspectionObj.commission
             }
-        ]);
+        ]).select(); ;
+
+       
     if (error) {
-        console.error('Error inserting data:', error);
+        console.error('Error inserting data:', error);   
         throw new Error('Error inserting data into Supabase');
+
     }
-    return true;
+     return data[0].id;
     // const { data: tables, error } = await supabase
     //     .from('user').select('*');
 
     // console.log('Tables:', tables);
+}
+
+
+async function updateInspection(inspectionObj) {
+    // Validate input
+    if (!inspectionObj || typeof inspectionObj !== 'object' || !inspectionObj.id) {
+        throw new Error('Invalid inspection object or missing ID');
+    }
+
+    // Destructure the ID from the object and keep the rest
+    const { id, ...updateData } = inspectionObj;
+
+    // Perform the update
+    const { data, error } = await supabase
+        .from('inspections')
+        .update(updateData)
+        .eq('id', id)
+        .select(); // Optional: returns the updated row
+
+    if (error) {
+        console.error('Error updating data:', error);
+        throw new Error('Error updating inspection in Supabase');
+    }
+
+    return data[0]; // or `data[0].id` if you only need the ID
 }
 
 async function getInspectionsByPlateAndEmail(plateNumber, email) {
@@ -213,6 +241,39 @@ async function getResellerByReferralCode(referralCode) {
     return user;
 }
 
+
+
+async function getInspectionsForInspectCar(plateNumber, email) {
+    const { data, error } = await supabase
+        .from('inspections')
+        .select('*')
+        .eq('plate_number', plateNumber)
+        .eq('email', email)
+        .is('reseller_id', null)
+        .gte('created_at', new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString());
+
+    if (error) {
+        console.error('Error fetching inspections:', error);
+        return null;
+    }
+
+    return data;
+};
+
+async function getInspectionById(inspectionId) {
+    const { data, error } = await supabase
+        .from('inspections')
+        .select('*')
+        .eq('id', inspectionId);
+
+    if (error) {
+        console.error('Error fetching inspections:', error);
+        return null;
+    }
+
+    return data[0];
+};
+
 module.exports = {
     saveInspection,
     getInspectionList,
@@ -220,8 +281,11 @@ module.exports = {
     getMonthlyInspections,
     getUserByEmail,
     getInspectionsByPlateAndEmail,
+    getInspectionsForInspectCar,
     getTotalInspectionsByReseller,
     getCommissionSummaryByPeriods,
     getResellerByReferralCode,
-    getUserById
+    getUserById,
+    getInspectionById,
+    updateInspection
 };
