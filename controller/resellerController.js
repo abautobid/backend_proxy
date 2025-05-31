@@ -184,6 +184,9 @@ const createInspect = async (req, res) => {
         const cebiaToken = await getCebiaToken();
     
         const cebiaQueue = await getCebiaBasicInfoQueueId(vin,cebiaToken);
+        if(cebiaQueue.error){
+            return res.status(400).json({ error: cebiaQueue.error });
+        }
 
         const couponNumber = await getPayedDataQuery(cebiaQueue,cebiaToken);
 

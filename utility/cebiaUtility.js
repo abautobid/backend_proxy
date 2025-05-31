@@ -63,8 +63,12 @@ async function getCebiaBasicInfoQueueId(vin, cebiaToken) {
         }
       );
 
-      const { queueStatus, baseInfoData, queue} = response.data;
+      const { queueStatus, baseInfoData, queue, status, message} = response.data;
       console.log(response.data);
+
+      if(status == 400 && message === "Invalid test VIN."){
+        return {error : "Invalid VIN."};
+      }
       if ((queueStatus === 1 || queueStatus === 2) && queue) {
         console.log("✅ VIN data ready!");
         console.log(queue);
