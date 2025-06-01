@@ -123,11 +123,51 @@ async function getPayedDataQuery(queueId, cebiaToken) {
 };
 
 
+async function getCebiaBasicInfo(queueId, cebiaToken) {
+
+
+  
+  const maxRetries = 20;
+  const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+  try {
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      console.log(`🔁 Poll attempt ${attempt} for queueId: ${queueId}`);
+
+      const response = await axios.get(
+        `${CEBIA_API_URL}GetBaseInfoQuery/${queueId}`,
+        {
+          headers: {
+            Accept: "application/json",
+            Authorization: `Bearer ${cebiaToken}`,
+          },
+        }
+      );
+
+      const { queueStatus, baseInfoData, queue} = response.data;
+      console.log(response.data);
+      if (queueStatus === 3 && baseInfoData) {
+        console.log("✅ VIN data ready!");
+        console.log(queue);
+        return baseInfoData;
+      }
+
+      await delay(3000); // wait 3 seconds before next try
+    }
+
+    return false;
+  } catch (err) {
+    console.error("❌ Polling error:", err.response?.data || err.message);
+    return false;
+  }
+};
 
 
 module.exports = {
     getCebiaToken,
     createBaseInfoQuery,
     getPayedDataQuery,
-    getCebiaBasicInfoQueueId
+    getCebiaBasicInfoQueueId,
+    getCebiaBasicInfo
 };

@@ -1,5 +1,5 @@
 // Removed incorrect import of req
-const { getCebiaToken, getCebiaBasicInfoQueueId, getPayedDataQuery } = require('../utility/cebiaUtility');
+const { getCebiaToken, getCebiaBasicInfoQueueId, getPayedDataQuery ,getCebiaBasicInfo} = require('../utility/cebiaUtility');
 const { saveInspection, getInspectionList, getTotalInspectionsByReseller, getMonthlyInspections, getUserByEmail, getInspectionsByPlateAndEmail,getCommissionSummaryByPeriods, getUserById} = require('../utility/supabaseUtility');
 const crypto = require('crypto');
 
@@ -211,6 +211,25 @@ const createInspect = async (req, res) => {
     }
 };
 
+const reviewInspection = async (req, res) => {
+    try {
+        const { vin } = req.body;
+        if (!vin) return res.status(400).json({ error: "VIN is required" });
+  
+        const cebiaToken = await getCebiaToken();
+
+         
+        const cebiaQueueNew = await getCebiaBasicInfoQueueId(vin,cebiaToken);
+        const baseInfoDataNew = await getCebiaBasicInfo(cebiaQueueNew,cebiaToken);
+        return res.status(200).json(baseInfoDataNew);
+        
+    } catch (err) {
+        console.error("Stripe Error:", err.message);
+        res.status(500).json({ error: "Could not create Stripe session" });
+    }
+
+};
+
 
 module.exports = {
     licensePlateLookup,
@@ -218,5 +237,6 @@ module.exports = {
     getSummary,
     remainingCredits,
     profileInfo,
-    createInspect
+    createInspect,
+    reviewInspection
 };
