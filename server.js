@@ -906,7 +906,15 @@ app.post('/api/inspect-car', async (req, res) => {
 
     }
 
-    return res.status(200).json({ inspectionId: inspection[0].id, message: "Inspection found.", status : inspection[0].status  });
+    return res.status(200).json({ 
+        inspectionId: inspection[0].id, 
+        message: "Inspection found.", 
+        status : inspection[0].status, 
+        skip_ai : inspection[0].skip_ai,  
+        cebia_coupon_number : inspection[0].cebia_coupon_number,  
+        ai_inspection_completed : inspection[0].ai_inspection_completed,  
+        image_uploaded : inspection[0].image_uploaded 
+      });
 
     
 
