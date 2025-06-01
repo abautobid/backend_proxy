@@ -6,11 +6,20 @@ const qs = require('qs');
 const nodemailer = require('nodemailer');
 const { v4: uuidv4 } = require('uuid');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-
+const crypto = require('crypto')
 
 const multer = require('multer');
 const fs = require('fs');
 const FormData = require('form-data');
+
+const fleetManager = require('./routes/fleetManager');
+const reseller = require('./routes/reseller');
+
+const { saveInspection,getInspectionsForInspectCar,getInspectionById,updateInspection } = require('./utility/supabaseUtility');
+const { sendEmailReport } = require('./utility/helper');
+const { getPayedDataQuery } = require('./utility/cebiaUtility');
+const { supabase } = require('./lib/supabaseClient.js');
+
 
 const router = express.Router();
 
@@ -39,12 +48,27 @@ const CEBIA_API_URL = process.env.CEBIA_API_URL;
 
 const inspectionEmails = {};
 
+
+const algorithm = 'aes-256-cbc';
+
+const ENCRYPTION_KEY='4f3c9a54b1d74f6a8e9bd3f7aef127ccb8e1d5f8477a2c0f3a3eec8327a1e5df'
+const ENCRYPTION_IV='9f4c3b1a7e8d2f6037a1c9b2f0a1e3c4'
+// Use a 32-byte (256-bit) key and a 16-byte IV (hex or base64 encoded)
+const secretKey = Buffer.from(ENCRYPTION_KEY, 'hex');
+const iv = Buffer.from(ENCRYPTION_IV, 'hex');
+
+
+
 app.use(cors({
   origin: ['http://localhost:3000','http://localhost:3001', 'https://24aba.com'],
 }));
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+app.use('/api/fleet', fleetManager);
+app.use('/api/reseller', reseller);
+
 
 app.get('/', (req, res) => {
   res.send('✅ Click-Ins backend is live!');
@@ -195,38 +219,40 @@ app.post('/api/clickins-callback', async (req, res) => {
 
 app.post('/api/create-payment-session', async (req, res) => {
   try {
-    const { email, vin } = req.body;
-    
-    if (!email) return res.status(400).json({ error: "Email is required" });
-    if (!vin) return res.status(400).json({ error: "VIN is required" });
-    const clickInsToken = await getClickInsToken();
-    
+    const { inspectionId } = req.body;
 
-    const inspectionData = await createClickInsInspection(clickInsToken);
-    const InspectionId = inspectionData.inspection_case_id;
-    
+    if (!inspectionId) return res.status(400).json({ error: "Invalid requsted id." });
 
+    const inspection = await getInspectionById(inspectionId);
+       
+    if (!inspection || inspection.length === 0) {
+        return res.status(401).json({ error: "Invalid request found." });         
+    }
+    const inspection_fee = 29.99;
+    const inspection_fee_stripe = 2999;
 
-    const cebiaToken = await getCebiaToken();
+    await updateInspection({
+        id: inspection.id,
+        inspection_fee: inspection_fee,
+    });
     
-    const cebiaQueue = await getCebiaBasicInfoQueueId(vin,cebiaToken);
-    
-    
+    const encryptedInspectionId = encrypt(inspection.id);
+
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
       line_items: [
         {
           price_data: {
             currency: 'eur',
-            product_data: { name: 'VIN '+vin+' Car Inspection' },
-            unit_amount: 2999,
+            product_data: { name: 'VIN '+inspection.plate_number+' Car Inspection' },
+            unit_amount: inspection_fee_stripe,
           },
           quantity: 1,
         },
       ],
       mode: 'payment',
-      customer_email: email,
-      success_url: PAYMENT_URL_24ABA+`?email=${encodeURIComponent(email)}&token=${encodeURIComponent(cebiaQueue)}&inpid=${InspectionId}&vin=${vin}`,
+      customer_email: inspection.email,
+      success_url: PAYMENT_URL_24ABA+`?id=${encryptedInspectionId}`,
       cancel_url: 'https://24aba.com/inspection/payment-cancelled',
     });
 
@@ -467,7 +493,7 @@ async function createClickInsInspection(clientToken, inspectionType = "FULL_INSP
   const CLICK_INS_URL = process.env.CLICK_INS_URL;
   const url = `${CLICK_INS_URL}inspections?upload_type=MEDIA`;
   
-  const clientProcessId = `PROCESS-TEST-${uuidv4()}`;
+  const clientProcessId = `PROCESS-INSPECTION-${uuidv4()}`;
 
   const body = {
     client_token: clientToken,
@@ -495,21 +521,88 @@ async function createClickInsInspection(clientToken, inspectionType = "FULL_INSP
 
 
 
-app.post('/api/upload-inspection-images', upload.array('files'), async (req, res) => {
+app.post('/api/complete-inspection', upload.array('files'), async (req, res) => {
   const { inspectionId } = req.body;
   const files = req.files;
 
-  if (!inspectionId || !files?.length) {
-    return res.status(400).json({ error: 'inspectionId and at least one image file are required' });
-  }
 
-  const token = await getClickInsToken();
-  try {
-    const responses = await Promise.all(
-      files.map((file, index) => uploadToClickIns(inspectionId, token, file, index))
-    );
 
-    return res.status(200).json({ message: 'Images uploaded', results: responses });
+    
+    if (!inspectionId || !files?.length) {
+      return res.status(400).json({ error: 'inspectionId is required' });
+    }
+        
+  
+    try {
+
+
+    const inspection = await getInspectionById(inspectionId);
+    console.log(inspection);
+    
+    if (!inspection || inspection.length === 0 || inspection.status !== 'paid') {
+
+        if(inspection && inspection.status === 'completed'){
+            return res.status(401).json({ error: "Request has already been completed" });
+        }else{
+            return res.status(401).json({ error: "Invalid request." });
+        }
+    }
+
+    if (!inspection.image_uploaded && !files?.length) {
+      return res.status(400).json({ error: 'At least one image file is required' });
+    }
+        
+
+    if(!inspection.cebia_coupon_number){
+      const cebiaToken =await getCebiaToken();
+
+      const couponNumber =  await getPayedDataQuery(inspection.queue_id,cebiaToken);         
+    
+      await updateInspection({
+          id: inspection.id,
+          cebia_coupon_number: couponNumber,
+          skip_ai : 0,
+      }); 
+
+    //  const emailSent2 = await sendEmailReport(inspection.email, url_completed);
+
+    }
+
+    const clickInsToken = await getClickInsToken();
+    
+    if(!inspection.inspection_case_id){
+      const inspectionData = await createClickInsInspection(clickInsToken);
+      const clickInsInspectionId = inspectionData.inspection_case_id;
+
+      await updateInspection({
+          id: inspection.id,
+          inspection_case_id: clickInsInspectionId
+      }); 
+
+    }
+
+    if(!inspection.image_uploaded){
+
+      const inspectionForClickIns = await getInspectionById(inspectionId);
+
+
+      const responses = await Promise.all(
+        files.map((file, index) => uploadToClickIns(inspectionForClickIns.inspection_case_id, clickInsToken, file, index))
+      );
+
+        await updateInspection({
+          id: inspection.id,
+          image_uploaded: 1,
+          skip_ai : 0,
+      }); 
+
+    }
+
+  
+  
+  
+
+    return res.status(200).json({ message: 'Images uploaded' });
   } catch (error) {
     console.error('Upload Error:', error.message);
     return res.status(500).json({ error: 'Failed to upload images to Click-Ins' });
@@ -554,17 +647,31 @@ async function uploadToClickIns(inspectionId, token, file, index) {
 
 app.post('/api/start-inspection', async (req, res) => {
   try {
-      const { inspectionId,email } = req.body;
+      const { inspectionId } = req.body;
       
 
     if (!inspectionId) {
       return res.status(400).json({ error: 'inspectionId is required' });
     }
 
-    const token = await getClickInsToken();
+
       
 
-    const apiUrl = `${CLICK_INS_URL}inspections/${inspectionId}/asyncProcess`;
+    const inspection = await getInspectionById(inspectionId);
+    console.log(inspection);
+    
+    if (!inspection || inspection.length === 0 || inspection.status !== 'paid' || inspection.skip_ai || !inspection.inspection_case_id || !inspection.image_uploaded  ) {
+
+      return res.status(401).json({
+        success: false,
+        error: 'invalid request'
+      });
+
+    }
+    const token = await getClickInsToken();
+    const inspectionCaseId = inspection.inspection_case_id;
+
+    const apiUrl = `${CLICK_INS_URL}inspections/${inspectionCaseId}/asyncProcess`;
 
     const response = await axios.post(
       apiUrl,
@@ -581,7 +688,7 @@ app.post('/api/start-inspection', async (req, res) => {
             ]
           }
         ],
-        inspectors_comment: "abc"
+        inspectors_comment: "inspection"
       },
       {
         headers: {
@@ -590,19 +697,29 @@ app.post('/api/start-inspection', async (req, res) => {
         },
         params: {
           key: CLICK_INS_API_KEY,
-          email: email,
+          email: inspection.email,
           callback: ''
         }
       }
     );
 
-    res.status(200).json({
+
+     
+    await updateInspection({
+        id: inspection.id,
+        status: 'completed',
+        ai_inspection_completed: 1,
+    });       
+
+    
+    return res.status(200).json({
       success: true,
       message: 'Inspection triggered',
       data: response.data
     });
+
   } catch (error) {
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       error: error.response?.data || error.message
     });
@@ -613,17 +730,38 @@ app.post('/api/start-inspection', async (req, res) => {
 
 app.post('/api/vin-detail', async (req, res) => {
   try {
-    const { email, vin } = req.body;
+    const { inspectionId } = req.body;
     
-    if (!email) return res.status(400).json({ error: "Email is required" });
-    if (!vin) return res.status(400).json({ error: "VIN is required" });
-    
-    const cebiaToken = await getCebiaToken();
-    const cebiaQueue = await getCebiaBasicInfoQueueId(vin,cebiaToken);
+    if (!inspectionId) return res.status(400).json({ error: "Inspection id is required" });
 
-    const baseInfoData = await getCebiaBasicInfo(cebiaQueue,cebiaToken);
+
+    const inspection = await getInspectionById(inspectionId);
     
-    return res.status(200).json(baseInfoData);
+    
+    if (!inspection || inspection.length === 0) {
+        return res.status(401).json({ error: "Invalid request found." });         
+    }
+
+    const cebiaToken = await getCebiaToken();
+
+    if(!inspection.queue_id){  
+      const cebiaQueueNew = await getCebiaBasicInfoQueueId(inspection.plate_number,cebiaToken);
+      await updateInspection({
+          id: inspection.id,
+          queue_id: cebiaQueueNew,
+      });
+      const baseInfoDataNew = await getCebiaBasicInfo(cebiaQueueNew,cebiaToken);
+      return res.status(200).json(baseInfoDataNew);
+    }else{
+      const cebiaQueue = await getCebiaBasicInfoQueueId(inspection.plate_number,cebiaToken);
+      const baseInfoData = await getCebiaBasicInfo(cebiaQueue,cebiaToken);
+      return res.status(200).json(baseInfoData);
+    }
+    
+  
+    
+
+    
   } catch (err) {
     console.error("Stripe Error:", err.message);
     res.status(500).json({ error: "Could not create Stripe session" });
@@ -725,6 +863,238 @@ app.post('/api/email-report', async (req, res) => {
 });
 
 
+
+app.post('/api/login', async (req, res) => {
+  const { email, password } = req.body;
+  if (!email || !password) {
+    return res.status(400).json({ error: 'Email and password are required' });
+  }
+
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+
+  if (error) {
+    return res.status(401).json({ error: error.message });
+  }
+
+  return res.status(200).json({
+    message: 'Login successful',
+    access_token: data.session.access_token,
+    user: data.user,
+  });
+});
+
+
+
+app.post('/api/inspect-car', async (req, res) => {
+  try {
+    const { email, vin} = req.body;
+    if (!email) return res.status(400).json({ error: "Email is required" });
+    if (!vin) return res.status(400).json({ error: "VIN is required" });
+
+    inspection = await getInspectionsForInspectCar(vin,email);
+    
+    if (!inspection || inspection.length === 0) {
+
+         const inspectionObj = {
+            plate_number: vin,
+            email: email,
+            status: 'pending'
+        };
+        const inspectionId = await saveInspection(inspectionObj);
+
+        if (inspectionId) {
+             return res.status(200).json({ inspectionId: inspectionId, message: "Inspection submitted successfully", status : 'pending' });
+        }else{
+             return res.status(401).json({ error: "Your request cannot be processed at this time. Please try again" });
+        }         
+
+    }
+
+    return res.status(200).json({ 
+        inspectionId: inspection[0].id, 
+        message: "Inspection found.", 
+        status : inspection[0].status, 
+        skip_ai : inspection[0].skip_ai,  
+        cebia_coupon_number : inspection[0].cebia_coupon_number,  
+        ai_inspection_completed : inspection[0].ai_inspection_completed,  
+        image_uploaded : inspection[0].image_uploaded 
+      });
+
+    
+
+  } catch (error) {
+    console.error('Error creating inspection:', error.response?.data || error.message);
+    res.status(500).json({ error: error.response?.data || error.message });
+  }
+});
+
+
+app.post('/api/payment-received', async (req, res) => {
+  try {
+    const { id } = req.body;
+    if (!id) return res.status(400).json({ error: "id is required" });
+    
+    
+    const inspectionId = decrypt(id);
+      
+
+    const inspection = await getInspectionById(inspectionId);
+    console.log(inspection);
+    
+    if (!inspection || inspection.length === 0 || inspection.status !== 'pending') {
+
+        if(inspection && inspection.status !== 'pending'){
+            return res.status(200).json({inspectionId: inspection.id, error: "request already processed." });
+        }else{
+            return res.status(401).json({ error: "request not found" });
+        }
+          
+    }else{  
+          await updateInspection({
+              id: inspection.id,
+              status: 'paid',
+          });
+    }
+
+    return res.status(200).json({ inspectionId: inspection.id, message: "Inspection found." });
+
+    
+
+  } catch (error) {
+    console.error('Error creating inspection:', error.response?.data || error.message);
+    res.status(500).json({ error : 'Invalid request.'});
+  }
+});
+
+
+app.post('/api/skip-ai-inspection', async (req, res) => {
+  try {
+    const { id } = req.body;
+    if (!id) return res.status(400).json({ error: "id is required" });
+    
+    
+    const inspectionId = id;
+      
+    const cebieReportUrl =  "https://en.cebia.com/?s_coupon=";
+
+    const inspection = await getInspectionById(inspectionId);
+    console.log(inspection);
+    
+    if (!inspection || inspection.length === 0 || inspection.status !== 'paid') {
+
+        if(inspection && inspection.status === 'completed' && inspection.cebia_coupon_number){
+            const url = cebieReportUrl+inspection.cebia_coupon_number;
+            const emailSent = await sendEmailReport(inspection.email, url);
+            
+            if(emailSent){
+              await updateInspection({
+                  id: inspection.id,
+                  status: 'completed',
+                  send_email : 1,
+                  skip_ai : 1,
+              }); 
+            }
+
+            return res.status(200).json({inspectionId: inspection.id, error: "request already processed.", url  : url});
+        }else{
+            return res.status(401).json({ error: "Invalid request." });
+        }
+          
+    }else{
+
+        const cebiaToken =await getCebiaToken();
+
+        const couponNumber =  await getPayedDataQuery(inspection.queue_id,cebiaToken);         
+        console.log(couponNumber);
+
+        const url_completed = cebieReportUrl+couponNumber;
+
+        await updateInspection({
+            id: inspection.id,
+            status: 'completed',
+            cebia_coupon_number: couponNumber,
+            skip_ai : 1,
+        }); 
+
+        const emailSent2 = await sendEmailReport(inspection.email, url_completed);
+
+        if(emailSent2){
+          await updateInspection({
+              id: inspection.id,
+              send_email : 1,
+          }); 
+        }
+
+        
+        return res.status(200).json({inspectionId: inspection.id, message: "requested_completed", url  : url_completed});
+    }    
+
+  } catch (error) {
+    console.error('Error creating inspection:', error.response?.data || error.message);
+    res.status(500).json({ error : 'Invalid request.'});
+  }
+});
+
+
+
+app.post('/api/get-inspection', async (req, res) => {
+  try {
+    const { id } = req.body;
+    if (!id) return res.status(400).json({ error: "id is required" });
+    const inspectionId = id;
+    const inspection = await getInspectionById(inspectionId);    
+    
+    if (!inspection || inspection.length === 0) {
+        return res.status(401).json({error: "request not found"}); 
+    }else{
+        const inpsectionObj = {
+          inspectionId : inspection.id,
+          status : inspection.status,
+          skip_ai : inspection.skip_ai,
+          ai_inspection_completed : inspection.ai_inspection_completed,
+          image_uploaded : inspection.image_uploaded,
+          cebia_coupon_number : inspection.cebia_coupon_number,
+          vin : inspection.plate_number,
+          inspection_case_id : inspection.inspection_case_id
+
+        }
+        return res.status(200).json(inpsectionObj);
+    }    
+
+  } catch (error) {
+    console.error('Error inspection:', error.response?.data || error.message);
+    res.status(500).json({ error : 'Invalid request.'});
+  }
+});
+
+
+
+
+
+
+
+
+app.get('/api/create-auth', async (req, res) => {
+  const email = 'reseller@gmail.com';
+  const password = 'test1234';
+  const { data, error } = await supabase.auth.signUp({ email, password });
+   return res.status(200).json({ data});
+});
+
+
+function encrypt(text) {
+  const cipher = crypto.createCipheriv(algorithm, secretKey, iv);
+  let encrypted = cipher.update(text, 'utf8', 'hex');
+  encrypted += cipher.final('hex');
+  return encrypted;
+}
+
+function decrypt(encryptedData) {
+  const decipher = crypto.createDecipheriv(algorithm, secretKey, iv);
+  let decrypted = decipher.update(encryptedData, 'hex', 'utf8');
+  decrypted += decipher.final('utf8');
+  return decrypted;
+}
 
 
 app.listen(PORT, '0.0.0.0', () => {
