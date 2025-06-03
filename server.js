@@ -901,11 +901,11 @@ app.post('/api/inspect-car', async (req, res) => {
     const cebiaQueueResp = await getCebiaBasicInfoQueueId(vin,cebiaToken);
     
     if(cebiaQueueResp.error){
-        return res.status(400).json({ error: "VIN i pavlefshëm. Ju lutem provoni me një të vlefshëm."});
+        return res.status(200).json({ error: "VIN i pavlefshëm. Ju lutem provoni me një të vlefshëm."});
     }
 
     if(!cebiaQueueResp){
-        return res.status(400).json({ error: "VIN i pavlefshëm. Ju lutem provoni me një të vlefshëm."});
+        return res.status(200).json({ error: "VIN i pavlefshëm. Ju lutem provoni me një të vlefshëm."});
     }
     
     inspection = await getInspectionsForInspectCar(vin,email);
