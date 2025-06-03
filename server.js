@@ -387,8 +387,11 @@ async function getCebiaBasicInfoQueueId(vin, cebiaToken) {
         }
       );
 
-      const { queueStatus, baseInfoData, queue} = response.data;
+      const { queueStatus, baseInfoData, queue,status} = response.data;
       console.log(response.data);
+      if(status == 400){
+        return {error : "Invalid VIN."};
+      }
       if ((queueStatus === 1 || queueStatus === 2) && queue) {
         console.log("✅ VIN data ready!");
         console.log(queue);
@@ -769,6 +772,8 @@ app.post('/api/vin-detail', async (req, res) => {
 });
 
 
+
+
 app.post('/api/get-inspection-detail', async (req, res) => {
   try {
       const { inspectionId } = req.body;
@@ -891,6 +896,18 @@ app.post('/api/inspect-car', async (req, res) => {
     if (!email) return res.status(400).json({ error: "Email is required" });
     if (!vin) return res.status(400).json({ error: "VIN is required" });
 
+
+    const cebiaToken = await getCebiaToken();
+    const cebiaQueueResp = await getCebiaBasicInfoQueueId(vin,cebiaToken);
+    
+    if(cebiaQueueResp.error){
+        return res.status(401).json({ error: "VIN i pavlefshëm. Ju lutem provoni me një të vlefshëm."});
+    }
+
+    if(!cebiaQueueResp){
+        return res.status(401).json({ error: "VIN i pavlefshëm. Ju lutem provoni me një të vlefshëm."});
+    }
+    
     inspection = await getInspectionsForInspectCar(vin,email);
     
     if (!inspection || inspection.length === 0) {
