@@ -17,7 +17,7 @@ const reseller = require('./routes/reseller');
 
 const { saveInspection,getInspectionsForInspectCar,getInspectionById,updateInspection } = require('./utility/supabaseUtility');
 const { sendEmailReport } = require('./utility/helper');
-const { getPayedDataQuery } = require('./utility/cebiaUtility');
+const { getPayedDataQuery,vinCheck } = require('./utility/cebiaUtility');
 const { supabase } = require('./lib/supabaseClient.js');
 
 
@@ -898,6 +898,10 @@ app.post('/api/inspect-car', async (req, res) => {
 
 
     const cebiaToken = await getCebiaToken();
+    const carInfoResp = await vinCheck(vin, cebiaToken);
+    if(!carInfoResp.isVinValid){
+          return res.status(200).json({ error: "VIN i pavlefshëm. Ju lutem provoni me një të vlefshëm."});
+    }
     const cebiaQueueResp = await getCebiaBasicInfoQueueId(vin,cebiaToken);
     
     if(cebiaQueueResp.error){
@@ -915,12 +919,15 @@ app.post('/api/inspect-car', async (req, res) => {
          const inspectionObj = {
             plate_number: vin,
             email: email,
-            status: 'pending'
+            status: 'pending',
+            model : carInfoResp.carInfo.model,
+            brand : carInfoResp.carInfo.brand,
+            
         };
         const inspectionId = await saveInspection(inspectionObj);
 
         if (inspectionId) {
-             return res.status(200).json({ inspectionId: inspectionId, message: "Inspection submitted successfully", status : 'pending' });
+             return res.status(200).json({ inspectionId: inspectionId, message: "Inspection submitted successfully", status : 'pending',  model : carInfoResp.carInfo.model, brand :carInfoResp.carInfo.brand });
         }else{
              return res.status(401).json({ error: "Your request cannot be processed at this time. Please try again" });
         }         
@@ -934,7 +941,9 @@ app.post('/api/inspect-car', async (req, res) => {
         skip_ai : inspection[0].skip_ai,  
         cebia_coupon_number : inspection[0].cebia_coupon_number,  
         ai_inspection_completed : inspection[0].ai_inspection_completed,  
-        image_uploaded : inspection[0].image_uploaded 
+        image_uploaded : inspection[0].image_uploaded,
+        model : inspection[0].model, 
+        brand : inspection[0].brand 
       });
 
     
@@ -1072,7 +1081,9 @@ app.post('/api/get-inspection', async (req, res) => {
           image_uploaded : inspection.image_uploaded,
           cebia_coupon_number : inspection.cebia_coupon_number,
           vin : inspection.plate_number,
-          inspection_case_id : inspection.inspection_case_id
+          inspection_case_id : inspection.inspection_case_id,
+          model : inspection.model,
+          brand : inspection.brand
 
         }
         return res.status(200).json(inpsectionObj);

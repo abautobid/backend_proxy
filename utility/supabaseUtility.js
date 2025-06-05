@@ -18,7 +18,10 @@ async function saveInspection(inspectionObj) {
                 reseller_id : inspectionObj.reseller_id,
                 inspection_case_id: inspectionObj.inspection_case_id,
                 cebia_coupon_number : inspectionObj.cebia_coupon_number,
-                commission : inspectionObj.commission
+                commission : inspectionObj.commission,
+                model : inspectionObj.model,
+                brand : inspectionObj.brand
+                
             }
         ]).select(); ;
 

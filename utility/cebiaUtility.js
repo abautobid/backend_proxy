@@ -164,10 +164,33 @@ async function getCebiaBasicInfo(queueId, cebiaToken) {
 };
 
 
+
+async function vinCheck(vin, cebiaToken) {
+  try {
+      const response = await axios.get(
+        `${CEBIA_API_URL}vinCheck/${vin}`,
+        {
+          headers: {
+            Accept: "application/json",
+            Authorization: `Bearer ${cebiaToken}`,
+          },
+        }
+      );
+
+      const responseData = response.data;
+      return responseData;
+  } catch (err) {
+    console.error("❌  error:", err.response?.data || err.message);
+    return false;
+  }
+};
+
+
 module.exports = {
     getCebiaToken,
     createBaseInfoQuery,
     getPayedDataQuery,
     getCebiaBasicInfoQueueId,
-    getCebiaBasicInfo
+    getCebiaBasicInfo,
+    vinCheck
 };
