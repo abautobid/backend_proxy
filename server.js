@@ -60,8 +60,14 @@ const iv = Buffer.from(ENCRYPTION_IV, 'hex');
 
 
 app.use(cors({
-  origin: ['http://localhost:3000','http://localhost:3001', 'https://24aba.com'],
+  origin: ['http://localhost:3000', 'http://localhost:3001', 'https://24aba.com'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], // include all that you use
+  allowedHeaders: ['Content-Type', 'Authorization'], // add more if needed
+  credentials: false // set to true only if you're using cookies
 }));
+
+// Optional: handle OPTIONS requests explicitly (usually not needed with cors middleware)
+app.options('*', cors());
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
