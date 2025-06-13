@@ -234,8 +234,8 @@ app.post('/api/create-payment-session', async (req, res) => {
     if (!inspection || inspection.length === 0) {
         return res.status(401).json({ error: "Invalid request found." });         
     }
-    const inspection_fee = 29.99;
-    const inspection_fee_stripe = 2999;
+    const inspection_fee = 24.99;
+    const inspection_fee_stripe = 2499;
 
     await updateInspection({
         id: inspection.id,
