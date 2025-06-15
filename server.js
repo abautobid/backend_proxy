@@ -1126,6 +1126,7 @@ app.post('/api/update-model-brand', async (req, res) => {
     const { data: distinctPlates, error: fetchError } = await supabase
       .from('inspections')
       .select('plate_number', { distinct: true })
+      .or('model.is.null,brand.is.null') // filters rows where model OR brand is null
       .limit(limit);
 
     if (fetchError) {
