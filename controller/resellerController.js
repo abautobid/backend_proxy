@@ -1,5 +1,5 @@
 // Removed incorrect import of req
-const { getCebiaToken, getCebiaBasicInfoQueueId, getPayedDataQuery ,getCebiaBasicInfo} = require('../utility/cebiaUtility');
+const { getCebiaToken, getCebiaBasicInfoQueueId, getPayedDataQuery ,getCebiaBasicInfo,vinCheck} = require('../utility/cebiaUtility');
 const { saveInspection, getInspectionList, getTotalInspectionsByReseller, getMonthlyInspections, getUserByEmail, getInspectionsByPlateAndEmail,getCommissionSummaryByPeriods, getUserById} = require('../utility/supabaseUtility');
 const crypto = require('crypto');
 
@@ -231,6 +231,24 @@ const reviewInspection = async (req, res) => {
 };
 
 
+const getVinCheck = async (req, res) => {
+    try {
+        const { vin } = req.body;
+        if (!vin) return res.status(400).json({ error: "VIN is required" });
+  
+        const cebiaToken = await getCebiaToken(); 
+        const data = await vinCheck(vin,cebiaToken);
+        return res.status(200).json(data);
+        
+    } catch (err) {
+        console.error("Cebia Error:", err.message);
+        res.status(500).json({ error: "Error occured. Please try again" });
+    }
+
+};
+
+
+
 module.exports = {
     licensePlateLookup,
     getInspection,
@@ -238,5 +256,6 @@ module.exports = {
     remainingCredits,
     profileInfo,
     createInspect,
-    reviewInspection
+    reviewInspection,
+    getVinCheck
 };
