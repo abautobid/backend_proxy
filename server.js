@@ -1116,6 +1116,67 @@ app.get('/api/create-auth', async (req, res) => {
 });
 
 
+
+app.post('/api/update-model-brand', async (req, res) => {
+  try {
+    // Get limit from query or default to 10
+    const limit = parseInt(req.query.limit) || 10;
+
+    // Fetch distinct plate numbers with a limit
+    const { data: distinctPlates, error: fetchError } = await supabase
+      .from('inspections')
+      .select('plate_number', { distinct: true })
+      .limit(limit);
+
+    if (fetchError) {
+      return res.status(500).json({ error: fetchError.message });
+    }
+
+    const cebiaToken = await getCebiaToken();
+    let updatedCount = 0;
+    let failed = [];
+
+    for (const row of distinctPlates) {
+      const vin = row.plate_number;
+
+      try {
+        const carInfoResp = await vinCheck(vin, cebiaToken);
+
+        if (carInfoResp?.isVinValid && carInfoResp.carInfo) {
+          const { model, brand } = carInfoResp.carInfo;
+
+          const { error: updateError } = await supabase
+            .from('inspections')
+            .update({ model, brand })
+            .eq('plate_number', vin);
+
+          if (updateError) {
+            failed.push({ vin, reason: updateError.message });
+          } else {
+            updatedCount++;
+          }
+        } else {
+          failed.push({ vin, reason: 'Invalid VIN or car info not found' });
+        }
+
+      } catch (err) {
+        failed.push({ vin, reason: err.message });
+      }
+    }
+
+    return res.status(200).json({
+      message: `Processed up to ${limit} VINs`,
+      updatedCount,
+      failed,
+    });
+
+  } catch (error) {
+    console.error('Unexpected error:', error.message);
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+
 function encrypt(text) {
   const cipher = crypto.createCipheriv(algorithm, secretKey, iv);
   let encrypted = cipher.update(text, 'utf8', 'hex');
