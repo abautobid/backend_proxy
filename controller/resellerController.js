@@ -174,6 +174,7 @@ const profileInfo = async (req, res) => {
 
 const createInspect = async (req, res) => {
     const user = req.user
+    const userProfile = req.userProfile
     console.log(user);
     const { vin, email } = req.body;
     if (!vin || !email) {
@@ -189,6 +190,8 @@ const createInspect = async (req, res) => {
         }
 
         const couponNumber = await getPayedDataQuery(cebiaQueue,cebiaToken);
+      
+        const ip = req.headers['x-forwarded-for']?.split(',')[0] || req.socket?.remoteAddress || null;
 
         const inspectionObj = {
             plate_number: vin,
@@ -199,7 +202,9 @@ const createInspect = async (req, res) => {
             user_id : null,
             inspection_case_id: null,
             reseller_id : user.id,
-            commission : 5
+            commission : userProfile.commission_rate,
+            ip_address: ip
+
         };
         
         await saveInspection(inspectionObj)
