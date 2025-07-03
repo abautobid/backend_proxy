@@ -961,6 +961,57 @@ app.post('/api/inspect-car', async (req, res) => {
 });
 
 
+
+app.post('/api/inspect-car-korea', async (req, res) => {
+  try {
+    const { email, vin } = req.body;
+    if (!email) return res.status(400).json({ error: "Email is required" });
+    if (!vin) return res.status(400).json({ error: "VIN is required" });
+
+
+    
+    inspection = await getInspectionsForInspectCar(vin,email);
+    
+    if (!inspection || inspection.length === 0) {
+
+         const inspectionObj = {
+            plate_number: vin,
+            email: email,
+            status: 'pending',
+            vin_type: 'korea'        
+        };
+        const inspectionId = await saveInspection(inspectionObj);
+
+        if (inspectionId) {
+             return res.status(200).json({ inspectionId: inspectionId, message: "Inspection submitted successfully", status : 'pending' });
+        }else{
+             return res.status(401).json({ error: "Your request cannot be processed at this time. Please try again" });
+        }         
+
+    }
+
+    return res.status(200).json({ 
+        inspectionId: inspection[0].id, 
+        message: "Inspection found.", 
+        status : inspection[0].status, 
+        skip_ai : inspection[0].skip_ai,  
+        cebia_coupon_number : inspection[0].cebia_coupon_number,  
+        ai_inspection_completed : inspection[0].ai_inspection_completed,  
+        image_uploaded : inspection[0].image_uploaded,
+        model : inspection[0].model, 
+        brand : inspection[0].brand,
+        vin_type : inspection[0].vin_type
+      });
+
+    
+
+  } catch (error) {
+    console.error('Error creating inspection:', error.response?.data || error.message);
+    res.status(500).json({ error: error.response?.data || error.message });
+  }
+});
+
+
 app.post('/api/payment-received', async (req, res) => {
   try {
     const { id } = req.body;
@@ -976,7 +1027,7 @@ app.post('/api/payment-received', async (req, res) => {
     if (!inspection || inspection.length === 0 || inspection.status !== 'pending') {
 
         if(inspection && inspection.status !== 'pending'){
-            return res.status(200).json({inspectionId: inspection.id, error: "request already processed." });
+            return res.status(200).json({inspectionId: inspection.id, error: "request already processed.", vin_type : inspection.vin_type });
         }else{
             return res.status(401).json({ error: "request not found" });
         }
@@ -985,10 +1036,14 @@ app.post('/api/payment-received', async (req, res) => {
           await updateInspection({
               id: inspection.id,
               status: 'paid',
+              
           });
+          if(inspection.vin_type == 'korea'){
+            await sendInspectionKoreaEmail({vin: inspection.plate_number, email : inspection.email, inspectionId: inspection.id})
+          }
     }
 
-    return res.status(200).json({ inspectionId: inspection.id, message: "Inspection found." });
+    return res.status(200).json({ inspectionId: inspection.id, message: "Inspection found.", vin_type : inspection.vin_type });
 
     
 
@@ -1190,6 +1245,52 @@ function decrypt(encryptedData) {
   let decrypted = decipher.update(encryptedData, 'hex', 'utf8');
   decrypted += decipher.final('utf8');
   return decrypted;
+}
+
+
+
+async function sendInspectionKoreaEmail({ vin, email, inspectionId}) {
+  if (!email) throw new Error("Email is required");
+  if (!vin) throw new Error("vin is required");
+
+  const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    host: process.env.SMTP_HOST,
+    port: parseInt(process.env.SMTP_PORT),
+    secure: true,
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS
+    },
+    tls: {
+      rejectUnauthorized: false
+    },
+    logger: true,
+    debug: true
+  });
+
+  const mailOptions = {
+    from: `"24ABA Inspections" <${process.env.EMAIL_USER}>`,
+    to: `${process.env.SUPPORT_EMAIL}`,
+    subject: "🚗 Korean Inspection Paid and Pending for Report !",
+    html: `
+      <p>Hello,</p>
+      <p>Korean VIN Inspection has been paid and waiting for Report email.</p>
+      <p>Details are following</p>
+      <p>
+        Id : ${inspectionId}<br>
+        VIN : ${vin}<br>
+        Customer Email : ${email}<br>
+        Status : Paid<br>
+      </p>
+      <p>– 24ABA Team</p>
+    `
+  };
+
+  await transporter.sendMail(mailOptions);
+  console.log("📧 Korean Inspection paid and waiting for report", "ahsan.shaikh.hyd@gmail.com");
+
+  return true;
 }
 
 

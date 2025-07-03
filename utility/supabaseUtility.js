@@ -20,7 +20,8 @@ async function saveInspection(inspectionObj) {
                 cebia_coupon_number : inspectionObj.cebia_coupon_number,
                 commission : inspectionObj.commission,
                 model : inspectionObj.model,
-                brand : inspectionObj.brand
+                brand : inspectionObj.brand,
+                vin_type : inspectionObj.vin_type
                 
             }
         ]).select(); ;
