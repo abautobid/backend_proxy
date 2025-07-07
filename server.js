@@ -1012,6 +1012,32 @@ app.post('/api/inspect-car-korea', async (req, res) => {
 });
 
 
+app.post('/api/notify-me-korea', async (req, res) => {
+  try {
+    const { contact, email, vin } = req.body;
+
+    if (!contact) return res.status(400).json({ error: "Contact Info is required" });
+    if (!email) return res.status(400).json({ error: "Email is required" });
+    if (!vin) return res.status(400).json({ error: "VIN is required" });
+
+    await supabase.from('korea_report_notifications').insert([
+      {
+        contact_info: contact,
+        email: email,
+        vin : vin,
+      }
+    ]);
+    return res.status(200).json({
+      message: "Faleminderit! Do t'ju njoftojmë sapo raportet për makinat nga Koreja të jenë sërish të disponueshme."
+    });
+
+  } catch (error) {
+    console.error('Error creating inspection:', error.response?.data || error.message);
+    res.status(500).json({ error: error.response?.data || error.message });
+  }
+});
+
+
 app.post('/api/payment-received', async (req, res) => {
   try {
     const { id } = req.body;
