@@ -278,6 +278,343 @@ async function getInspectionById(inspectionId) {
     return data[0];
 };
 
+async function getAllResellers() {
+    const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('type', 'reseller')
+        .order('created_at', { ascending: false });
+
+    if (error) {
+        console.error('Error fetching resellers:', error);
+        throw new Error('Error fetching resellers from Supabase');
+    }
+
+    return data;
+}
+
+
+async function createResellerWithAuth(resellerData) {
+    const {
+        email,
+        password,
+        name,
+        company,
+        phone,
+        location,
+        commission_rate,
+        status = 'active'
+    } = resellerData;
+
+    if (!email || !password || !name) {
+        throw new Error('Missing required fields: email, password, name');
+    }
+
+    // 1. Create auth user
+    const { data: authUser, error: authError } = await supabase.auth.admin.createUser({
+        email,
+        password,
+        email_confirm: true,
+    });
+
+    if (authError) {
+        throw new Error(authError.message);
+    }
+
+    const userId = authUser.user.id;
+
+    // 2. Insert into public.users
+    const { data, error } = await supabase.from('users').insert([
+        {
+        id: userId,
+        email,
+        name,
+        company,
+        phone,
+        location,
+        commission_rate,
+        type: 'reseller',
+        status,
+        }
+    ]).select('*');
+
+    if (error) {
+        throw new Error('Failed to create new reseller. Please try again.');
+    }
+
+    return data[0];
+}
+
+
+async function updateResellerById(resellerId, updatedData) {
+  const {
+    email,
+    name,
+    company,
+    phone,
+    location,
+    commission_rate,
+    status,
+  } = updatedData;
+
+  if (!resellerId) {
+    throw new Error('Missing reseller ID for update.');
+  }
+
+ 
+  if (email) {
+    const { error: authUpdateError } = await supabase.auth.admin.updateUserById(resellerId, {
+      email,
+    });
+
+    if (authUpdateError) {
+      throw new Error(`Failed to update auth email: ${authUpdateError.message}`);
+    }
+  }
+
+
+  // Update fields in public.users table
+  const { data, error } = await supabase
+    .from('users')
+    .update({
+      ...(email && { email }),
+      ...(name && { name }),
+      ...(company && { company }),
+      ...(phone && { phone }),
+      ...(location && { location }),
+      ...(commission_rate !== undefined && { commission_rate }),
+      ...(status && { status }),
+    })
+    .eq('id', resellerId)
+    .select('*');
+
+  if (error) {
+    throw new Error(`Failed to update reseller: ${error.message}`);
+  }
+
+  return data[0];
+}
+
+async function getMonthlyInspectionStats() {
+    const now = new Date();
+    const inspectionsTrend = [];
+
+    for (let i = 4; i >= 0; i--) {
+        const start = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const end = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
+
+        const { count, error } = await supabase
+            .from('inspections')
+            .select('id', { count: 'exact', head: true })
+            .gte('created_at', start.toISOString())
+            .lt('created_at', end.toISOString());
+
+        if (error) {
+            console.error(`Error fetching inspections for ${start.toLocaleString('default', { month: 'short' })}:`, error);
+            throw new Error('Error fetching inspections trend');
+        }
+
+        inspectionsTrend.push({
+            month: start.toLocaleString('default', { month: 'short' }),
+            count: count || 0,
+        });
+    }
+
+    // Existing logic for current/previous stats...
+    const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+    const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString();
+    const previousMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString();
+
+    const { count: currentCount, error: currentError } = await supabase
+        .from('inspections')
+        .select('id', { count: 'exact', head: true })
+        .gte('created_at', currentMonthStart)
+        .lt('created_at', nextMonthStart);
+
+    if (currentError) throw new Error('Error fetching current month inspections');
+
+    const { count: previousCount, error: previousError } = await supabase
+        .from('inspections')
+        .select('id', { count: 'exact', head: true })
+        .gte('created_at', previousMonthStart)
+        .lt('created_at', currentMonthStart);
+
+    if (previousError) throw new Error('Error fetching previous month inspections');
+
+    const inspectionsGrowth =
+        previousCount > 0
+            ? ((currentCount - previousCount) / previousCount) * 100
+            : currentCount > 0 ? 100 : 0;
+
+    const { data: currentData, error: currentDataError } = await supabase
+        .from('inspections')
+        .select('inspection_fee, commission')
+        .gte('created_at', currentMonthStart)
+        .lt('created_at', nextMonthStart);
+
+    if (currentDataError) throw new Error('Error fetching current month revenue/commission');
+
+    const { data: prevData, error: prevDataError } = await supabase
+        .from('inspections')
+        .select('inspection_fee, commission')
+        .gte('created_at', previousMonthStart)
+        .lt('created_at', currentMonthStart);
+
+    if (prevDataError) throw new Error('Error fetching previous month revenue/commission');
+
+    const sum = (arr, key) => arr.reduce((acc, item) => acc + (item[key] || 0), 0);
+
+    const currentMonthRevenue = sum(currentData, 'inspection_fee');
+    const prevMonthRevenue = sum(prevData, 'inspection_fee');
+    const currentMonthCommissions = sum(currentData, 'commission');
+    const prevMonthCommissions = sum(prevData, 'commission');
+
+    const revenueGrowth =
+        prevMonthRevenue > 0
+            ? parseFloat(((currentMonthRevenue - prevMonthRevenue) / prevMonthRevenue * 100).toFixed(2))
+            : currentMonthRevenue > 0 ? 100 : 0;
+
+    const commissionsGrowth =
+        prevMonthCommissions > 0
+            ? parseFloat(((currentMonthCommissions - prevMonthCommissions) / prevMonthCommissions * 100).toFixed(2))
+            : currentMonthCommissions > 0 ? 100 : 0;
+
+    return {
+        inspections: {
+            currentMonth: currentCount,
+            previousMonth: previousCount,
+            growth: inspectionsGrowth,
+            trend: inspectionsTrend
+        },
+        revenue: {
+            currentMonth: currentMonthRevenue,
+            previousMonth: prevMonthRevenue,
+            growth: revenueGrowth
+        },
+        commissions: {
+            currentMonth: currentMonthCommissions,
+            previousMonth: prevMonthCommissions,
+            growth: commissionsGrowth
+        }
+    };
+}
+
+async function getTopResellers(limit = 5) {
+  // Step 1: Count inspections grouped by reseller_id
+  const { data: inspectionStats, error: statsError } = await supabase
+    .from('inspections')
+    .select('reseller_id, commission')
+    .not('reseller_id', 'is', null); // skip nulls
+
+  if (statsError) {
+    console.error('Error fetching inspection stats:', statsError);
+    throw new Error('Failed to fetch inspection stats');
+  }
+
+  // Group and aggregate by reseller_id
+  const resellerMap = new Map();
+
+  inspectionStats.forEach(({ reseller_id, commission }) => {
+    if (!resellerMap.has(reseller_id)) {
+      resellerMap.set(reseller_id, { id: reseller_id, count: 0, total: 0 });
+    }
+    const record = resellerMap.get(reseller_id);
+    record.count += 1;
+    record.total += parseFloat(commission || 0);
+  });
+
+  // Get top N by count
+  const topResellersStats = Array.from(resellerMap.values())
+    .sort((a, b) => b.count - a.count)
+    .slice(0, limit);
+
+  const topResellerIds = topResellersStats.map(r => r.id);
+
+  // Step 2: Get user/reseller details
+  const { data: resellerDetails, error: resellerError } = await supabase
+    .from('users') // or 'resellers' if that’s your table
+    .select('id, name, company')
+    .in('id', topResellerIds);
+
+  if (resellerError) {
+    console.error('Error fetching reseller details:', resellerError);
+    throw new Error('Failed to fetch reseller details');
+  }
+
+  // Step 3: Merge stats with user info
+  const result = topResellersStats.map(stat => {
+    const user = resellerDetails.find(r => r.id === stat.id);
+    return {
+      id: stat.id,
+      name: user?.name || 'Unknown',
+      company: user?.company || '-',
+      count: stat.count,
+      total: parseFloat(stat.total.toFixed(2))
+    };
+  });
+
+  return result;
+}
+
+async function getResellerAcquisitionTrends() {
+  const now = new Date();
+  const trends = [];
+
+  for (let i = 4; i >= 0; i--) {
+    const start = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const end = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
+
+    const { count, error } = await supabase
+    .from('users') 
+    .select('id', { count: 'exact', head: true })
+    .gte('created_at', start.toISOString())
+    .lt('created_at', end.toISOString())
+    .eq('type', 'reseller');
+
+    if (error) {
+      console.error(`Error fetching acquisition for ${start.toLocaleString('default', { month: 'short' })}:`, error);
+      throw new Error('Failed to fetch reseller acquisition stats');
+    }
+
+    trends.push({
+      month: start.toLocaleString('default', { month: 'short' }),
+      count: count || 0
+    });
+  }
+
+  return trends;
+}
+
+async function getResellerCountsByStatus() {
+  const { data, error } = await supabase
+    .from('users') // or 'resellers' if that's your table
+    .select('id, status')
+    .eq('type', 'reseller');
+
+  if (error) {
+    console.error('Error fetching resellers by status:', error);
+    throw new Error('Failed to fetch resellers by status');
+  }
+
+  // Group and count by status
+  const statusCounts = {};
+
+  data.forEach(({ status }) => {
+    if (!status) return;
+    statusCounts[status] = (statusCounts[status] || 0) + 1;
+  });
+
+  return statusCounts;
+}
+
+
+
+
+
+
+
+
+
 module.exports = {
     saveInspection,
     getInspectionList,
@@ -291,5 +628,12 @@ module.exports = {
     getResellerByReferralCode,
     getUserById,
     getInspectionById,
-    updateInspection
+    updateInspection,
+    getAllResellers,
+    createResellerWithAuth,
+    updateResellerById,
+    getMonthlyInspectionStats,
+    getTopResellers,
+    getResellerAcquisitionTrends,
+    getResellerCountsByStatus
 };

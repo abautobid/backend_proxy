@@ -14,8 +14,9 @@ const FormData = require('form-data');
 
 const fleetManager = require('./routes/fleetManager');
 const reseller = require('./routes/reseller');
+const admin = require('./routes/admin');
 
-const { saveInspection,getInspectionsForInspectCar,getInspectionById,updateInspection } = require('./utility/supabaseUtility');
+const { saveInspection,getInspectionsForInspectCar,getInspectionById,updateInspection, getUserById } = require('./utility/supabaseUtility');
 const { sendEmailReport } = require('./utility/helper');
 const { getPayedDataQuery,vinCheck } = require('./utility/cebiaUtility');
 const { supabase } = require('./lib/supabaseClient.js');
@@ -74,6 +75,8 @@ app.use(express.urlencoded({ extended: true }));
 
 app.use('/api/fleet', fleetManager);
 app.use('/api/reseller', reseller);
+app.use('/api/admin', admin);
+
 
 
 app.get('/', (req, res) => {
@@ -886,11 +889,21 @@ app.post('/api/login', async (req, res) => {
   if (error) {
     return res.status(401).json({ error: error.message });
   }
+    
+  const user_data = await getUserById(data.user.id);
+
+  const user = {
+    id : data.user.id,
+    email : data.user.email,
+    name : user_data.name,
+    role : user_data.type
+  }
+
 
   return res.status(200).json({
     message: 'Login successful',
     access_token: data.session.access_token,
-    user: data.user,
+    user: user,
   });
 });
 
@@ -922,12 +935,15 @@ app.post('/api/inspect-car', async (req, res) => {
     
     if (!inspection || inspection.length === 0) {
 
+        const ip = req.headers['x-forwarded-for']?.split(',')[0] || req.socket?.remoteAddress || null;
+
          const inspectionObj = {
             plate_number: vin,
             email: email,
             status: 'pending',
             model : carInfoResp.carInfo.model,
             brand : carInfoResp.carInfo.brand,
+            ip_address: ip,
             
         };
         const inspectionId = await saveInspection(inspectionObj);
