@@ -406,6 +406,7 @@ async function getMonthlyInspectionStats() {
         const { count, error } = await supabase
             .from('inspections')
             .select('id', { count: 'exact', head: true })
+            .in('status', ['completed', 'paid'])
             .gte('created_at', start.toISOString())
             .lt('created_at', end.toISOString());
 
@@ -428,6 +429,7 @@ async function getMonthlyInspectionStats() {
     const { count: currentCount, error: currentError } = await supabase
         .from('inspections')
         .select('id', { count: 'exact', head: true })
+        .in('status', ['completed', 'paid'])
         .gte('created_at', currentMonthStart)
         .lt('created_at', nextMonthStart);
 
@@ -436,6 +438,7 @@ async function getMonthlyInspectionStats() {
     const { count: previousCount, error: previousError } = await supabase
         .from('inspections')
         .select('id', { count: 'exact', head: true })
+        .in('status', ['completed', 'paid'])
         .gte('created_at', previousMonthStart)
         .lt('created_at', currentMonthStart);
 
@@ -449,6 +452,7 @@ async function getMonthlyInspectionStats() {
     const { data: currentData, error: currentDataError } = await supabase
         .from('inspections')
         .select('inspection_fee, commission')
+        .in('status', ['completed', 'paid'])
         .gte('created_at', currentMonthStart)
         .lt('created_at', nextMonthStart);
 
@@ -457,6 +461,7 @@ async function getMonthlyInspectionStats() {
     const { data: prevData, error: prevDataError } = await supabase
         .from('inspections')
         .select('inspection_fee, commission')
+        .in('status', ['completed', 'paid'])
         .gte('created_at', previousMonthStart)
         .lt('created_at', currentMonthStart);
 
