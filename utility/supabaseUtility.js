@@ -612,11 +612,161 @@ async function getResellerCountsByStatus() {
   return statusCounts;
 }
 
+async function logCheckCarVinRequest({ url, request, response }) {
+  const { error } = await supabase
+    .from('checkcarvin_logs')
+    .insert([{
+      request_data:request,
+      response_data: response,
+      url
+
+    }]);
+
+  if (error) {
+    console.error('[!] Failed to log to Supabase:', error.message);
+  }
+}
 
 
 
+async function saveCheckCarVinInspection(inspectionObj) {
+    // Check if the inspectionObj is valid
+    if (!inspectionObj || typeof inspectionObj !== 'object') {
+        throw new Error('Invalid inspection object');
+    }
+    // save into supabase inspection table
+    const { data, error } = await supabase
+        .from('check_car_vin_inspection')
+        .insert([
+            {
+                inspection_id: inspectionObj.inspection_id,
+                vin: inspectionObj.vin,
+                vin_data_available: true,
+                stored_vin_data : inspectionObj.stored_vin_data,
+
+            }
+        ]).select(); ;
+
+       
+    if (error) {
+        console.error('Error inserting data:', error);   
+        throw new Error('Error inserting data into Supabase');
+
+    }
+     return data[0].id;
+    // const { data: tables, error } = await supabase
+    //     .from('user').select('*');
+
+    // console.log('Tables:', tables);
+}
 
 
+async function getPaidInspectKorea(){
+  // Step 1: Fetch from check_car_vin_inspection
+  const { data: vinRecords, error: vinError } = await supabase
+    .from('check_car_vin_inspection')
+    .select('*');
+
+  if (vinError) {
+    console.error('Error fetching VIN records:', vinError);
+    return;
+  }
+
+  // Step 2: Get unique inspection_ids
+  const inspectionIds = vinRecords.map(v => v.inspection_id);
+
+  // Step 3: Fetch related inspections with status = 'paid'
+  const { data: inspections, error: inspectionsError } = await supabase
+    .from('inspections')
+    .select('*')
+    .in('id', inspectionIds)
+    .eq('status', 'paid');
+
+  if (inspectionsError) {
+    console.error('Error fetching inspections:', inspectionsError);
+    return;
+  }
+
+  // Step 4: Merge only matching records
+  const merged = vinRecords
+    .map(vin => {
+      const relatedInspection = inspections.find(ins => ins.id === vin.inspection_id);
+      if (!relatedInspection) return null; // only include those with a matching 'paid' inspection
+
+      return {
+        ...vin, // return only check_car_vin_inspection fields
+        // optionally add this if you need extra data from inspection
+        plate_number: relatedInspection.plate_number,
+        email: relatedInspection.email
+      };
+    })
+    .filter(Boolean); // remove nulls
+
+  console.log(merged);
+  return merged[0];
+
+}
+
+
+
+async function updateCheckCarVinInspection(id, updates) {
+  const { data, error } = await supabase
+    .from('check_car_vin_inspection')
+    .update(updates)
+    .eq('id', id);
+
+  if (error) {
+    console.error(`Failed to update record ID ${id}:`, error);
+    return null;
+  }
+
+  return data // or return `data` if expecting multiple
+}
+
+
+
+async function updateAppSettings(property, prop_value) {
+  const { data, error } = await supabase
+    .from('app_settings')
+    .update({ prop_value : prop_value})
+    .eq('property', property);
+
+  if (error) {
+    console.error(`Failed to update record ID ${property}:`, error);
+    return null;
+  }
+
+  return data[0]; // or return `data` if expecting multiple
+}
+
+async function getAppSettings(property) {
+    const { data, error } = await supabase
+        .from('app_settings')
+        .select('*')
+        .eq('property', property)
+        .single();
+    
+    if (error) {
+        console.error('Error fetching App settings value:', error);
+        throw new Error('Error fetching app setting by property from Supabase');
+    }
+    return data;
+}
+
+
+async function getCheckCarVinInspectionByInspectionId(inspectionId) {
+    const { data, error } = await supabase
+        .from('check_car_vin_inspection')
+        .select('*')
+        .eq('inspection_id', inspectionId)
+        .single();
+    
+    if (error) {
+        console.error('Error fetching check_car_vin_inspection value:', error);
+        throw new Error('Error fetching check_car_vin_inspection by property from Supabase');
+    }
+    return data;
+}
 
 
 
@@ -640,5 +790,12 @@ module.exports = {
     getMonthlyInspectionStats,
     getTopResellers,
     getResellerAcquisitionTrends,
-    getResellerCountsByStatus
+    getResellerCountsByStatus,
+    logCheckCarVinRequest,
+    saveCheckCarVinInspection,
+    getPaidInspectKorea,
+    updateCheckCarVinInspection,
+    updateAppSettings,
+    getAppSettings,
+    getCheckCarVinInspectionByInspectionId
 };

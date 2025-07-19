@@ -10,16 +10,25 @@ const crypto = require('crypto')
 
 const multer = require('multer');
 const fs = require('fs');
+const path = require('path');
+
 const FormData = require('form-data');
 
 const fleetManager = require('./routes/fleetManager');
 const reseller = require('./routes/reseller');
 const admin = require('./routes/admin');
 
-const { saveInspection,getInspectionsForInspectCar,getInspectionById,updateInspection, getUserById } = require('./utility/supabaseUtility');
+const { saveInspection,getInspectionsForInspectCar,
+        getInspectionById,updateInspection, getUserById, saveCheckCarVinInspection,
+        getPaidInspectKorea,updateCheckCarVinInspection, updateAppSettings,
+        getAppSettings,getCheckCarVinInspectionByInspectionId
+      } = require('./utility/supabaseUtility');
 const { sendEmailReport } = require('./utility/helper');
-const { getPayedDataQuery,vinCheck } = require('./utility/cebiaUtility');
+const { getPayedDataQuery,vinCheck} = require('./utility/cebiaUtility');
+const { getStoreCheckedVin, payFromBalanceRaw,checkReportStatusRaw, loginCheckCarVin,downloadCheckCarVinPdf, removeNullChars} = require('./utility/CheckCarVinUtility');
 const { supabase } = require('./lib/supabaseClient.js');
+
+const { extractVehicleData } = require('./utility/checkCarVinPDFParser');
 
 
 const router = express.Router();
@@ -988,7 +997,16 @@ app.post('/api/inspect-car-korea', async (req, res) => {
     
     inspection = await getInspectionsForInspectCar(vin,email);
     
+   
+      
     if (!inspection || inspection.length === 0) {
+
+      
+       const checkCarVin = await getStoreCheckedVin(vin);
+
+        if(checkCarVin.vehicle == '-'){
+            return res.status(200).json({ error: "VIN i pavlefshëm. Ju lutem provoni me një të vlefshëm." });
+        }
 
          const inspectionObj = {
             plate_number: vin,
@@ -998,13 +1016,23 @@ app.post('/api/inspect-car-korea', async (req, res) => {
         };
         const inspectionId = await saveInspection(inspectionObj);
 
+        const checkCarVinInspectionObj = {
+                inspection_id: inspectionId,
+                vin: vin,
+                stored_vin_data : checkCarVin
+        }
+
+        await saveCheckCarVinInspection(checkCarVinInspectionObj)
+
         if (inspectionId) {
-             return res.status(200).json({ inspectionId: inspectionId, message: "Inspection submitted successfully", status : 'pending' });
+             return res.status(200).json({ inspectionId: inspectionId, message: "Inspection submitted successfully", status : 'pending', vin_detail: checkCarVin });
         }else{
-             return res.status(401).json({ error: "Your request cannot be processed at this time. Please try again" });
+             return res.status(200).json({ error: "Your request cannot be processed at this time. Please try again" });
         }         
 
     }
+
+    const checkCarVinData = await getCheckCarVinInspectionByInspectionId(inspection[0].id)
 
     return res.status(200).json({ 
         inspectionId: inspection[0].id, 
@@ -1016,7 +1044,9 @@ app.post('/api/inspect-car-korea', async (req, res) => {
         image_uploaded : inspection[0].image_uploaded,
         model : inspection[0].model, 
         brand : inspection[0].brand,
-        vin_type : inspection[0].vin_type
+        vin_type : inspection[0].vin_type,
+        vin_detail: checkCarVinData.stored_vin_data,
+
       });
 
     
@@ -1334,6 +1364,260 @@ async function sendInspectionKoreaEmail({ vin, email, inspectionId}) {
 
   return true;
 }
+
+
+
+app.post('/api/get-check-car-vin', async (req, res) => {
+  try {
+    const { vin } = req.body;
+    if (!vin) return res.status(400).json({ error: "vin is required" });
+
+    const resp = await getStoreCheckedVin(vin);
+
+    return res.status(200).json(resp);
+
+  } catch (error) {
+    console.error('Error inspection:', error.response?.data || error.message);
+    res.status(500).json({ error: 'Invalid request.' });
+  }
+});
+
+
+app.post('/api/generate-check-car-vin', async (req, res) => {
+  try {
+    
+    const result = await getPaidInspectKorea();
+    
+
+    if (!result.initiate_report) {
+      const resp = await payFromBalanceRaw(result.vin, 'michaelllagami4@gmail.com');
+
+      if (
+        resp &&
+        resp.status === 200 &&
+        resp.message === 'Payment successful!' &&
+        Array.isArray(resp.reports) &&
+        resp.reports.length > 0
+      ) {
+        const reportId = resp.reports[0];
+        const userId = resp.user_id;
+
+
+        await updateCheckCarVinInspection(result.id, {
+          report_id: reportId,
+          initiate_report: true,
+          checkcarvin_user_id : userId,
+        });
+
+        console.log('Payment success, report ID:', reportId);
+
+      } else {
+        console.error('Payment failed or invalid response:', resp);
+      }
+    }
+
+
+    const result2 = await getPaidInspectKorea();
+
+
+    if (result.initiate_report && !result.report_generated) {
+      const resp2 = await checkReportStatusRaw({
+        vin: result.vin,
+        user_id: result.checkcarvin_user_id,
+        reports: [result.report_id]
+      });
+
+      if (
+        resp2 &&
+        resp2.status === 200 &&
+        resp2.message === 'Report generated success!' &&
+        resp2.queue_status === 'Success' &&
+        Array.isArray(resp2.reports) &&
+        resp2.reports.length > 0 &&
+        resp2.reports[0].status === 'Success'
+      ) {
+        const generatedReport = resp2.reports[0];
+        const generatedReportId = generatedReport.id;
+
+        await updateCheckCarVinInspection(result.id, {
+          report_generated: true,
+          report_uuid: generatedReportId
+        });
+
+        console.log('✅ Report generated successfully:', generatedReportId);
+      } else {
+        console.warn('⚠️ Report not yet generated or failed:', resp2);
+      }
+    }
+
+
+
+    return res.status(200).json({message : 'done', result2});
+
+  } catch (error) {
+    console.error('Error inspection:', error.response?.data || error.message);
+    res.status(500).json({ error: 'Invalid request.' });
+  }
+});
+
+app.post('/api/report-status-check-car-vin', async (req, res) => {
+  try {
+  
+    const result2 = await getPaidInspectKorea();
+
+    const resp = downloadCheckCarVinPdf(result2.report_uuid)
+
+    return res.status(200).json(resp);
+
+  } catch (error) {
+    console.error('Error inspection:', error.response?.data || error.message);
+    res.status(500).json({ error: 'Invalid request.' });
+  }
+});
+
+app.post('/api/parse-report-check-car-vin', async (req, res) => {
+  try {
+  
+    const result2 = await getPaidInspectKorea();
+    const reportId = result2.report_uuid.replace(/-/g, '');
+  
+    const pdfPath = path.resolve(__dirname, `uploads\\${reportId}.pdf`);
+
+    const resp = await extractVehicleData(pdfPath)
+
+    if (resp && typeof resp === 'object' && !Array.isArray(resp) && resp.model && resp.year) {
+        
+        const inspection = await getInspectionById(result2.inspection_id);    
+
+        const baseUrl = process.env.WEB_APP_BASE_URL;
+        
+        
+
+        const safeResp = removeNullChars(resp)
+
+        await updateCheckCarVinInspection(result2.id, {
+          report_data: safeResp,
+        });
+
+        await updateInspection({
+              id: result2.inspection_id,
+              status: 'completed',
+              
+          });
+        
+        const shortUrl = baseUrl + `inspect-car/korea-report/?id=${inspection.id}`
+        
+        sendInspectionKoreaReport({vin : inspection.plate_number, email : inspection.email, short_link : shortUrl})
+
+      
+        console.log("Valid JSON object");
+      
+    } else {
+      console.log("Not a valid JSON object");
+    }
+
+    return res.status(200).json(resp);
+    
+
+  } catch (error) {
+    console.error('Error inspection:', error.response?.data || error.message);
+    res.status(500).json({ error: 'Invalid request.' });
+  }
+});
+
+app.post('/api/login-check-car-vin', async (req, res) => {
+  try {
+
+    
+    const { token, user } = await loginCheckCarVin('michaelllagami4@gmail.com', 'Demo2025@@');
+    console.log('Login token:', token);
+    console.log('User:', user);
+    await updateAppSettings('check_car_vin_token', token);
+    return res.status(200).json({token : token});
+
+  } catch (error) {
+    console.error('Error inspection:', error.response?.data || error.message);
+    res.status(500).json({ error: 'Invalid request.' });
+  }
+});
+
+
+app.post('/api/get-korea-report', async (req, res) => {
+   try {
+    const { id } = req.body;
+    if (!id) return res.status(400).json({ error: "id is required" });
+    const inspectionId = id;
+    const inspection = await getInspectionById(inspectionId);    
+    
+    if (!inspection || inspection.length === 0) {
+        return res.status(200).json({error: "Kërkesa nuk u gjet."}); 
+    }else if(inspection.status == 'pending'){
+        return res.status(200).json({error: "Ju lutemi përfundoni pagesën për të gjeneruar raportin."}); 
+    }else if(inspection.status == 'paid'){
+        return res.status(200).json({error: "Raporti është në pritje, ju lutemi prisni."}); 
+
+    }else{
+        const checkCarVinData = await getCheckCarVinInspectionByInspectionId(inspection.id)
+        res.status(200).json(checkCarVinData.report_data);
+    }    
+
+  } catch (error) {
+    console.error('Error inspection:', error.response?.data || error.message);
+    res.status(500).json({ error : 'Invalid request.'});
+  }
+});
+
+
+
+async function sendInspectionKoreaReport({ vin, email, short_link}) {
+  if (!email) throw new Error("Email is required");
+  if (!vin) throw new Error("vin is required");
+  if (!short_link) throw new Error("short_link is required");
+
+
+  // ✅ Send inspection link by email
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      host: process.env.SMTP_HOST,
+      port: parseInt(process.env.SMTP_PORT),
+      secure: true,
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS
+      },
+      tls: {
+        rejectUnauthorized: false
+      },
+      logger: true,
+      debug: true
+    });
+
+    const mailOptions = {
+      from: `"24ABA Inspections" <${process.env.EMAIL_USER}>`,
+      to: email,
+      subject: "🚗 Your Inspection Link is Ready!",
+      html: `
+        <p>Hello,</p>
+        <p>Thank you for completing your payment!</p>
+        <p>Your car inspection is now ready. Click the button below to begin:</p>
+        <p style="text-align:center;">
+          <a href="${short_link}" style="display:inline-block;padding:12px 24px;background-color:#e60023;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:bold;">
+            Open Full Report ${vin}
+          </a>
+        </p>
+        <p>If the button doesn't work, you can also click or paste this link:</p>
+        <p><a href="${short_link}">${short_link}</a></p>
+        <p>– 24ABA Team</p>
+      `
+    };
+
+    await transporter.sendMail(mailOptions);
+    console.log("📧 Inspection link email sent to", email);
+
+
+  return true;
+}
+
 
 
 app.listen(PORT, '0.0.0.0', () => {
