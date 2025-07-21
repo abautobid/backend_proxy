@@ -261,10 +261,10 @@ async function checkReportStatusRaw({ vin, user_id, reports, intent = "", cnt = 
   return response;
 }
 
+
 async function loginCheckCarVin(email, password) {
   const auth_token_report = await getCheckCarVinReportToken();
   const token = `Bearer ${auth_token_report}`;
-
 
   const browser = await puppeteer.launch({
     headless: 'new',
@@ -278,57 +278,66 @@ async function loginCheckCarVin(email, password) {
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36'
   );
 
-  // Go to site to trigger Cloudflare challenge
+  // Navigate to checkcar.vin to pass Cloudflare
   await page.goto('https://checkcar.vin', {
     waitUntil: 'networkidle2',
     timeout: 60000,
   });
 
-  
+  // Wait for Cloudflare challenge to pass
   await new Promise(resolve => setTimeout(resolve, 15000));
 
+  // Get cookies from browser session
+  const cookies = await page.cookies();
+  const cookieHeader = cookies.map(c => `${c.name}=${c.value}`).join('; ');
 
-  const response = await page.evaluate(async ({token, email, password }) => {
-    try {
-      const res = await fetch('https://api.checkcar.vin/api/v1/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': token,
-          'Accept': 'application/json',
-        },
-        body: JSON.stringify({
-          email,
-          password,
-          device_name: 'Mozilla/5.0 Chrome/114.0.0.0',
-        }),
-      });
+  // Try to extract XSRF-TOKEN from cookies (if any)
+  const xsrfToken = cookies.find(c => c.name === 'XSRF-TOKEN')?.value;
 
-      const data = await res.json();
-      return { ok: true, data };
-    } catch (err) {
-      return { ok: false, error: err.message };
-    }
-  }, { token, email, password });
+  await browser.close();
 
+  // Prepare headers for backend request
+  const headers = {
+    'Content-Type': 'application/json',
+    'Authorization': token,
+    'Accept': 'application/json',
+    'User-Agent': 'Mozilla/5.0 Chrome/114.0.0.0',
+    'Cookie': cookieHeader,
+  };
 
-  if (!response.ok) {
-    console.error('Login failed:', response.error);
-    return { error: response.error };
+  if (xsrfToken) {
+    headers['x-xsrf-token'] = decodeURIComponent(xsrfToken);
   }
 
-  // Optional logging
-  await logCheckCarVinRequest({
-    url: 'auth/login',
-    request: { email, password },
-    response: response.data,
-  });
+  // Perform the API login request using node-fetch (or global fetch in Node 18+)
+  try {
+    const res = await fetch('https://api.checkcar.vin/api/v1/auth/login', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        email,
+        password,
+        device_name: 'Mozilla/5.0 Chrome/114.0.0.0',
+      }),
+    });
 
-    await browser.close();
+    const data = await res.json();
 
+    // Optional logging
+    await logCheckCarVinRequest({
+      url: 'auth/login',
+      request: { email, password },
+      response: data,
+    });
 
-  return response.data;
+    return data;
+
+  } catch (err) {
+    console.error('Login failed:', err);
+    return { error: err.message };
+  }
 }
+
 
 
 
