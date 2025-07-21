@@ -296,6 +296,7 @@ async function loginCheckCarVin(email, password) {
 
       return await res.json();
     } catch (err) {
+      console.log(err.message);
       return { error: err.message };
     }
   }, payload);
