@@ -1,11 +1,15 @@
 const axios = require('axios');
 const qs = require('qs');
-const puppeteer = require('puppeteer');
 const { supabase } = require('../lib/supabaseClient.js');
 const { logCheckCarVinRequest, getAppSettings} = require('./supabaseUtility');
 const fs = require('fs');
 const path = require('path');
 
+const puppeteer = require('puppeteer-extra');
+const StealthPlugin = require('puppeteer-extra-plugin-stealth');
+
+
+puppeteer.use(StealthPlugin());
 
 
 
@@ -278,25 +282,23 @@ async function loginCheckCarVin(email, password) {
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36'
   );
 
-  // Navigate to checkcar.vin to pass Cloudflare
+  // Go to main page to bypass Cloudflare
   await page.goto('https://checkcar.vin', {
     waitUntil: 'networkidle2',
     timeout: 60000,
   });
 
-  // Wait for Cloudflare challenge to pass
-  await new Promise(resolve => setTimeout(resolve, 15000));
+  // Let Cloudflare JS challenge complete
+    await new Promise(resolve => setTimeout(resolve, 7000));
 
-  // Get cookies from browser session
+
+  // Get session cookies
   const cookies = await page.cookies();
   const cookieHeader = cookies.map(c => `${c.name}=${c.value}`).join('; ');
-
-  // Try to extract XSRF-TOKEN from cookies (if any)
   const xsrfToken = cookies.find(c => c.name === 'XSRF-TOKEN')?.value;
 
   await browser.close();
 
-  // Prepare headers for backend request
   const headers = {
     'Content-Type': 'application/json',
     'Authorization': token,
@@ -309,7 +311,6 @@ async function loginCheckCarVin(email, password) {
     headers['x-xsrf-token'] = decodeURIComponent(xsrfToken);
   }
 
-  // Perform the API login request using node-fetch (or global fetch in Node 18+)
   try {
     const res = await fetch('https://api.checkcar.vin/api/v1/auth/login', {
       method: 'POST',
@@ -323,7 +324,6 @@ async function loginCheckCarVin(email, password) {
 
     const data = await res.json();
 
-    // Optional logging
     await logCheckCarVinRequest({
       url: 'auth/login',
       request: { email, password },
@@ -331,7 +331,6 @@ async function loginCheckCarVin(email, password) {
     });
 
     return data;
-
   } catch (err) {
     console.error('Login failed:', err);
     return { error: err.message };
