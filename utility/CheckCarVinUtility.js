@@ -45,7 +45,7 @@ async function getStoreCheckedVinRaw(vin) {
     console.log('[*] Waiting for Cloudflare challenge to pass...');
 
     // Wait for cookies or JS challenges to resolve
-    await new Promise(resolve => setTimeout(resolve, 7000));
+    await new Promise(resolve => setTimeout(resolve, 9000));
 
 
     console.log('[*] Sending API request from within browser...');
@@ -281,7 +281,7 @@ async function loginCheckCarVin(email, password) {
   });
 
   // Wait extra time to be safe
-  await new Promise(resolve => setTimeout(resolve, 7000));
+  await new Promise(resolve => setTimeout(resolve, 9000));
 
   const response = await page.evaluate(async ({ email, password }) => {
     try {
