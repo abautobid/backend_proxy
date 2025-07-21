@@ -45,18 +45,23 @@ async function getStoreCheckedVinRaw(vin) {
     console.log('[*] Waiting for Cloudflare challenge to pass...');
 
     // Wait for cookies or JS challenges to resolve
-    await new Promise(resolve => setTimeout(resolve, 9000));
+    await new Promise(resolve => setTimeout(resolve, 15000));
 
+
+    const xToken = 'eyJpdiI6Ilp1Uzl5Z0RzUTltbXk0SnhRZks3QkE9PSIsInZhbHVlIjoicWZqT2hPKzdDZUtOazRCSjV1empXYk5QU2R3RWpndWRzRjBTZ2JXOStuL2dIMTBsbjFuZFNQc1N3UE13RFc3Wjl2UGxVYnFBbFdMY283QnMzeUh3OElFRXp3VFRodVVzekNOMk9KS2dCQ2hRZ05kWStlcjk3Y2hSbnpNanJVSnciLCJtYWMiOiI4OGU1NTZmNzJlZTNjMTU5ODc1ZjE2OWU2MzdiYzM4YjcwNzI5MDk3NTFjMjNiZjQ0NTEwYThmMmJlNmQ1ZDZjIiwidGFnIjoiIn0%3D';
+    const xsrfToken = decodeURIComponent(xToken);
+    
 
     console.log('[*] Sending API request from within browser...');
 
-    const responseData = await page.evaluate(async ({ vin, token }) => {
+    const responseData = await page.evaluate(async ({xsrfToken, vin, token }) => {
         const res = await fetch('/api/v1/dashboard/store-checked-vin', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': token,
-                'Accept': 'application/json'
+                'Accept': 'application/json',
+                'x-xsrf-token': xsrfToken,
             },
             body: JSON.stringify({ vin }),
         });
@@ -64,7 +69,7 @@ async function getStoreCheckedVinRaw(vin) {
         const data = await res.json();
         
         return data;
-    }, { vin, token });
+    }, { xsrfToken, vin, token });
 
     await browser.close();
 
