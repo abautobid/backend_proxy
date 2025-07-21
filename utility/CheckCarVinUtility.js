@@ -37,7 +37,7 @@ async function getStoreCheckedVinRaw(vin) {
 
     console.log('[*] Navigating to checkcar.vin...');
 
-    await page.goto('https://checkcar.vin', {
+    await page.goto('https://api.checkcar.vin', {
         waitUntil: 'networkidle2',
         timeout: 60000,
     });
@@ -51,7 +51,7 @@ async function getStoreCheckedVinRaw(vin) {
     console.log('[*] Sending API request from within browser...');
 
     const responseData = await page.evaluate(async ({ vin, token }) => {
-        const res = await fetch('https://api.checkcar.vin/api/v1/dashboard/store-checked-vin', {
+        const res = await fetch('/api/v1/dashboard/store-checked-vin', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
