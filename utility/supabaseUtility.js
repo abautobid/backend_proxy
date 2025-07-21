@@ -736,7 +736,7 @@ async function updateAppSettings(property, prop_value) {
     return null;
   }
 
-  return data[0]; // or return `data` if expecting multiple
+  return data; // or return `data` if expecting multiple
 }
 
 async function getAppSettings(property) {

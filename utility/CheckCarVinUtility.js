@@ -311,7 +311,6 @@ async function loginCheckCarVin(email, password) {
     }
   }, { token, email, password });
 
-  await browser.close();
 
   if (!response.ok) {
     console.error('Login failed:', response.error);
@@ -321,9 +320,12 @@ async function loginCheckCarVin(email, password) {
   // Optional logging
   await logCheckCarVinRequest({
     url: 'auth/login',
-    request_data: { email, password },
-    response_data: response.data,
+    request: { email, password },
+    response: response.data,
   });
+
+    await browser.close();
+
 
   return response.data;
 }
