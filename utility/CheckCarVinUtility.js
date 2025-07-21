@@ -262,6 +262,10 @@ async function checkReportStatusRaw({ vin, user_id, reports, intent = "", cnt = 
 }
 
 async function loginCheckCarVin(email, password) {
+  const auth_token_report = await getCheckCarVinReportToken();
+  const token = `Bearer ${auth_token_report}`;
+
+
   const browser = await puppeteer.launch({
     headless: 'new',
     args: ['--no-sandbox', '--disable-setuid-sandbox'],
@@ -284,12 +288,13 @@ async function loginCheckCarVin(email, password) {
   await new Promise(resolve => setTimeout(resolve, 15000));
 
 
-  const response = await page.evaluate(async ({ email, password }) => {
+  const response = await page.evaluate(async ({token, email, password }) => {
     try {
       const res = await fetch('https://api.checkcar.vin/api/v1/auth/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': token,
           'Accept': 'application/json',
         },
         body: JSON.stringify({
@@ -304,7 +309,7 @@ async function loginCheckCarVin(email, password) {
     } catch (err) {
       return { ok: false, error: err.message };
     }
-  }, { email, password });
+  }, { token, email, password });
 
   await browser.close();
 
