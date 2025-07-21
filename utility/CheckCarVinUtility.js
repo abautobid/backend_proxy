@@ -27,7 +27,8 @@ async function getStoreCheckedVinRaw(vin) {
 
     const browser = await puppeteer.launch({
         headless: 'new',
-        args: ['--no-sandbox', '--disable-setuid-sandbox']
+        args: ['--no-sandbox', '--disable-setuid-sandbox'],
+        executablePath: puppeteer.executablePath(),
     });
 
     const page = await browser.newPage();
@@ -121,7 +122,8 @@ async function payFromBalanceRaw(vin, email) {
 
   const browser = await puppeteer.launch({
     headless: 'new',
-    args: ['--no-sandbox', '--disable-setuid-sandbox']
+    args: ['--no-sandbox', '--disable-setuid-sandbox'],
+     executablePath: puppeteer.executablePath(),
   });
 
   const page = await browser.newPage();
@@ -202,7 +204,8 @@ async function checkReportStatusRaw({ vin, user_id, reports, intent = "", cnt = 
 
   const browser = await puppeteer.launch({
     headless: 'new',
-    args: ['--no-sandbox', '--disable-setuid-sandbox']
+    args: ['--no-sandbox', '--disable-setuid-sandbox'],
+     executablePath: puppeteer.executablePath(),
   });
 
   const page = await browser.newPage();
@@ -260,7 +263,8 @@ async function checkReportStatusRaw({ vin, user_id, reports, intent = "", cnt = 
 async function loginCheckCarVin(email, password) {
   const browser = await puppeteer.launch({
     headless: 'new',
-    args: ['--no-sandbox', '--disable-setuid-sandbox']
+    args: ['--no-sandbox', '--disable-setuid-sandbox'],
+     executablePath: puppeteer.executablePath(),
   });
 
   const page = await browser.newPage();
@@ -317,7 +321,8 @@ async function downloadCheckCarVinPdf(reportIdRaw) {
   console.log('[*] Launching browser...');
   const browser = await puppeteer.launch({
     headless: 'new',
-    args: ['--no-sandbox', '--disable-setuid-sandbox']
+    args: ['--no-sandbox', '--disable-setuid-sandbox'],
+     executablePath: puppeteer.executablePath(),
   });
 
   const page = await browser.newPage();
