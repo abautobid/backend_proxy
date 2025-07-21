@@ -261,10 +261,20 @@ async function checkReportStatusRaw({ vin, user_id, reports, intent = "", cnt = 
   return response;
 }
 async function loginCheckCarVin(email, password) {
+
+  const executablePath = path.resolve(
+  __dirname,
+  'puppeteer-cache',
+  'chrome',
+  'linux-138.0.7204.94',
+  'chrome-linux64',
+  'chrome'
+);
+
   const browser = await puppeteer.launch({
     headless: 'new',
     args: ['--no-sandbox', '--disable-setuid-sandbox'],
-     executablePath: puppeteer.executablePath(),
+     executablePath
   });
 
   const page = await browser.newPage();
