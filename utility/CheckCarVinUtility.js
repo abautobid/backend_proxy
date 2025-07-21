@@ -260,58 +260,69 @@ async function checkReportStatusRaw({ vin, user_id, reports, intent = "", cnt = 
 
   return response;
 }
+
 async function loginCheckCarVin(email, password) {
-  
   const browser = await puppeteer.launch({
     headless: 'new',
     args: ['--no-sandbox', '--disable-setuid-sandbox'],
-     executablePath: puppeteer.executablePath(),
+    executablePath: puppeteer.executablePath(),
   });
 
   const page = await browser.newPage();
+
   await page.setUserAgent(
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36'
   );
 
+  // Go to site to trigger Cloudflare challenge
   await page.goto('https://checkcar.vin', {
     waitUntil: 'networkidle2',
-    timeout: 60000
+    timeout: 60000,
   });
 
-  // Wait for Cloudflare challenge
+  // Wait extra time to be safe
   await new Promise(resolve => setTimeout(resolve, 7000));
 
-  const payload = { email, password, device_name: 'Mozilla/5.0 Chrome/114.0.0.0' };
-  console.log(payload);
-  const response = await page.evaluate(async (payload) => {
+  const response = await page.evaluate(async ({ email, password }) => {
     try {
       const res = await fetch('https://api.checkcar.vin/api/v1/auth/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Accept': 'application/json'
+          'Accept': 'application/json',
         },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({
+          email,
+          password,
+          device_name: 'Mozilla/5.0 Chrome/114.0.0.0',
+        }),
       });
 
-      return await res.json();
+      const data = await res.json();
+      return { ok: true, data };
     } catch (err) {
-      console.log(err.message);
-      return { error: err.message };
+      return { ok: false, error: err.message };
     }
-  }, payload);
+  }, { email, password });
 
   await browser.close();
-  console.log(response)
-  // Log and return
+
+  if (!response.ok) {
+    console.error('Login failed:', response.error);
+    return { error: response.error };
+  }
+
+  // Optional logging
   await logCheckCarVinRequest({
     url: 'auth/login',
-    request_data: payload,
-    response_data : response
+    request_data: { email, password },
+    response_data: response.data,
   });
 
-  return response;
+  return response.data;
 }
+
+
 
 
 async function downloadCheckCarVinPdf(reportIdRaw) {
