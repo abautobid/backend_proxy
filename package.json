@@ -4,8 +4,7 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node server.js",
-       "postinstall": "PUPPETEER_CACHE_DIR=./puppeteer-cache npx puppeteer browsers install chrome@138.0.7204.94"
+    "start": "node server.js"
 
   },
   "keywords": [],
