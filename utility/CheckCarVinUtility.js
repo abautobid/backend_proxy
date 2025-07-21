@@ -279,7 +279,7 @@ async function loginCheckCarVin(email, password) {
   );
 
   // Go to site to trigger Cloudflare challenge
-  await page.goto('https://checkcar.vin', {
+  await page.goto('https://api.checkcar.vin', {
     waitUntil: 'networkidle2',
     timeout: 60000,
   });
@@ -292,7 +292,7 @@ async function loginCheckCarVin(email, password) {
 
   const response = await page.evaluate(async ({xsrfToken, token, email, password }) => {
     try {
-      const res = await fetch('https://api.checkcar.vin/api/v1/auth/login', {
+      const res = await fetch('/api/v1/auth/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
