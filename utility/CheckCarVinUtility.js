@@ -1,15 +1,11 @@
 const axios = require('axios');
 const qs = require('qs');
+const puppeteer = require('puppeteer');
 const { supabase } = require('../lib/supabaseClient.js');
 const { logCheckCarVinRequest, getAppSettings} = require('./supabaseUtility');
 const fs = require('fs');
 const path = require('path');
 
-const puppeteer = require('puppeteer-extra');
-const StealthPlugin = require('puppeteer-extra-plugin-stealth');
-
-
-puppeteer.use(StealthPlugin());
 
 
 
@@ -265,10 +261,10 @@ async function checkReportStatusRaw({ vin, user_id, reports, intent = "", cnt = 
   return response;
 }
 
-
 async function loginCheckCarVin(email, password) {
   const auth_token_report = await getCheckCarVinReportToken();
   const token = `Bearer ${auth_token_report}`;
+
 
   const browser = await puppeteer.launch({
     headless: 'new',
@@ -282,61 +278,59 @@ async function loginCheckCarVin(email, password) {
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36'
   );
 
-  // Go to main page to bypass Cloudflare
+  // Go to site to trigger Cloudflare challenge
   await page.goto('https://checkcar.vin', {
     waitUntil: 'networkidle2',
     timeout: 60000,
   });
 
-  // Let Cloudflare JS challenge complete
-    await new Promise(resolve => setTimeout(resolve, 7000));
+  
+  await new Promise(resolve => setTimeout(resolve, 15000));
 
+  const xToken = 'eyJpdiI6Ilp1Uzl5Z0RzUTltbXk0SnhRZks3QkE9PSIsInZhbHVlIjoicWZqT2hPKzdDZUtOazRCSjV1empXYk5QU2R3RWpndWRzRjBTZ2JXOStuL2dIMTBsbjFuZFNQc1N3UE13RFc3Wjl2UGxVYnFBbFdMY283QnMzeUh3OElFRXp3VFRodVVzekNOMk9KS2dCQ2hRZ05kWStlcjk3Y2hSbnpNanJVSnciLCJtYWMiOiI4OGU1NTZmNzJlZTNjMTU5ODc1ZjE2OWU2MzdiYzM4YjcwNzI5MDk3NTFjMjNiZjQ0NTEwYThmMmJlNmQ1ZDZjIiwidGFnIjoiIn0%3D';
+    const xsrfToken = decodeURIComponent(xToken);
 
-  // Get session cookies
-  const cookies = await page.cookies();
-  const cookieHeader = cookies.map(c => `${c.name}=${c.value}`).join('; ');
-  const xsrfToken = cookies.find(c => c.name === 'XSRF-TOKEN')?.value;
+  const response = await page.evaluate(async ({xsrfToken, token, email, password }) => {
+    try {
+      const res = await fetch('https://api.checkcar.vin/api/v1/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': token,
+          'Accept': 'application/json',
+            'x-xsrf-token': xsrfToken,
+
+        },
+        body: JSON.stringify({
+          email,
+          password,
+          device_name: 'Mozilla/5.0 Chrome/114.0.0.0',
+        }),
+      });
+
+      const data = await res.json();
+      return { ok: true, data };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  }, { xsrfToken, token, email, password });
 
   await browser.close();
 
-  const headers = {
-    'Content-Type': 'application/json',
-    'Authorization': token,
-    'Accept': 'application/json',
-    'User-Agent': 'Mozilla/5.0 Chrome/114.0.0.0',
-    'Cookie': cookieHeader,
-  };
-
-  if (xsrfToken) {
-    headers['x-xsrf-token'] = decodeURIComponent(xsrfToken);
+  if (!response.ok) {
+    console.error('Login failed:', response.error);
+    return { error: response.error };
   }
 
-  try {
-    const res = await fetch('https://api.checkcar.vin/api/v1/auth/login', {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        email,
-        password,
-        device_name: 'Mozilla/5.0 Chrome/114.0.0.0',
-      }),
-    });
+  // Optional logging
+  await logCheckCarVinRequest({
+    url: 'auth/login',
+    request: { email, password },
+    response: response.data,
+  });
 
-    const data = await res.json();
-
-    await logCheckCarVinRequest({
-      url: 'auth/login',
-      request: { email, password },
-      response: data,
-    });
-
-    return data;
-  } catch (err) {
-    console.error('Login failed:', err);
-    return { error: err.message };
-  }
+  return response.data;
 }
-
 
 
 
