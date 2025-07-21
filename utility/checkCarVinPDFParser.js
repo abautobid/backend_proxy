@@ -145,6 +145,9 @@ async function extractVehicleData(filePath) {
 	mileages : {},
 	accidents: {},
 	export_info:{},
+  technical_inspection:{},
+  auction_sales:{},
+  
   };
 
   for (let i = 0; i < lines.length; i++) {
@@ -359,7 +362,9 @@ async function extractVehicleData(filePath) {
 	
 	report.accidents = await extractAccidents(lines);
 	report.export_info = await extractExportInfo(lines);
-
+	report.technical_inspection = await  extractTechnicalInspection(lines);
+	report.auction_sales = await extractAuctionSales(lines);
+ 
 
   }
 
@@ -372,6 +377,109 @@ async function normalizeKey(text) {
     .replace(/[^\w\s]/g, '')
     .replace(/\s+/g, '_');
 }
+
+
+
+async function extractAuctionSales(lines) {
+  const auctions = [];
+  let current = null;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+
+    // Start of a new auction block
+    const soldMatch = line.match(/^SOLD\s+#(\d+)/);
+    if (soldMatch) {
+      if (current) auctions.push(current);
+      current = {
+        number: parseInt(soldMatch[1]),
+        price_usd: null,
+        mileage: null,
+        platform: null,
+        date: null,
+        make: null,
+        model: null,
+        year: null,
+        engine_capacity: null,
+        body: null,
+        transmission: null
+      };
+    }
+
+    if (current) {
+      // Standard full format with mileage
+      const fullMatch = line.match(/(\d+)\s*USD\s*([\d,]+)\s*km\s*([A-Z0-9.]+)\s*(\d{4}-\d{2}-\d{2})/i);
+      if (fullMatch) {
+        current.price_usd = parseInt(fullMatch[1]);
+        current.mileage = fullMatch[2].replace(/,/g, "") + " km";
+        current.platform = fullMatch[3];
+        current.date = fullMatch[4];
+        continue;
+      }
+
+      // Compact format without mileage
+      const compactMatch = line.match(/^(\d+)\s*USD\s*([A-Z0-9.]+)(\d{4}-\d{2}-\d{2})$/i);
+      if (compactMatch) {
+        current.price_usd = parseInt(compactMatch[1]);
+        current.platform = compactMatch[2];
+        current.date = compactMatch[3];
+        continue;
+      }
+
+      // VEHICLE INFO parsing
+      if (line.startsWith("Make")) {
+        current.make = line.replace("Make", "").trim();
+      } else if (line.startsWith("Model")) {
+        current.model = line.replace("Model", "").trim();
+      } else if (line.startsWith("Year")) {
+        const year = parseInt(line.replace("Year", "").trim());
+        if (!isNaN(year)) current.year = year;
+      } else if (line.startsWith("Engine capacity")) {
+        current.engine_capacity = line.replace("Engine capacity", "").trim();
+      } else if (line.startsWith("Body")) {
+        current.body = line.replace("Body", "").trim();
+      } else if (line.startsWith("Transmission")) {
+        current.transmission = line.replace("Transmission", "").trim();
+      }
+    }
+  }
+
+  // Add final auction if exists
+  if (current) auctions.push(current);
+
+  return auctions;
+}
+
+
+
+async function extractTechnicalInspection(lines) {
+  const result = {
+    valid_from: null,
+    valid_to: null,
+    mileage_at_inspection: null,
+  };
+
+  const startIndex = lines.findIndex(line => line.includes('Technical inspection'));
+  const endIndex = lines.findIndex((line, i) => i > startIndex && line.includes('Source: Checkcar.vin'));
+
+  if (startIndex !== -1 && endIndex !== -1) {
+    for (let i = startIndex; i <= endIndex; i++) {
+      const line = lines[i];
+
+      const fromMatch = line.match(/Date from\s*(\d{4}-\d{2}-\d{2})/);
+      if (fromMatch) result.valid_from = fromMatch[1];
+
+      const toMatch = line.match(/Date to\s*(\d{4}-\d{2}-\d{2})/);
+      if (toMatch) result.valid_to = toMatch[1];
+
+      const mileageMatch = line.match(/Mileage\s*([\d,]+)\s*km/);
+      if (mileageMatch) result.mileage_at_inspection = mileageMatch[1].replace(/,/g, '') + ' km';
+    }
+  }
+
+  return result;
+}
+
 
 
 

@@ -960,7 +960,7 @@ app.post('/api/inspect-car', async (req, res) => {
         if (inspectionId) {
              return res.status(200).json({ inspectionId: inspectionId, message: "Inspection submitted successfully", status : 'pending',  model : carInfoResp.carInfo.model, brand :carInfoResp.carInfo.brand });
         }else{
-             return res.status(401).json({ error: "Your request cannot be processed at this time. Please try again" });
+             return res.status(401).json({ error: "Kërkesa juaj nuk mund të përpunohet në këtë moment. Ju lutemi provoni përsëri." });
         }         
 
     }
@@ -1004,6 +1004,10 @@ app.post('/api/inspect-car-korea', async (req, res) => {
       
        const checkCarVin = await getStoreCheckedVin(vin);
 
+        if(!checkCarVin.vehicle){
+            return res.status(200).json({ error: "VIN i pavlefshëm. Ju lutem provoni me një të vlefshëm." });
+        }
+
         if(checkCarVin.vehicle == '-'){
             return res.status(200).json({ error: "VIN i pavlefshëm. Ju lutem provoni me një të vlefshëm." });
         }
@@ -1027,7 +1031,7 @@ app.post('/api/inspect-car-korea', async (req, res) => {
         if (inspectionId) {
              return res.status(200).json({ inspectionId: inspectionId, message: "Inspection submitted successfully", status : 'pending', vin_detail: checkCarVin });
         }else{
-             return res.status(200).json({ error: "Your request cannot be processed at this time. Please try again" });
+             return res.status(200).json({ error: "Kërkesa juaj nuk mund të përpunohet në këtë moment. Ju lutemi provoni përsëri." });
         }         
 
     }
@@ -1053,7 +1057,7 @@ app.post('/api/inspect-car-korea', async (req, res) => {
 
   } catch (error) {
     console.error('Error creating inspection:', error.response?.data || error.message);
-    res.status(500).json({ error: error.response?.data || error.message });
+    res.status(500).json({ error: 'Kërkesa juaj nuk mund të përpunohet në këtë moment. Ju lutemi provoni përsëri.' });
   }
 });
 
@@ -1389,8 +1393,11 @@ app.post('/api/generate-check-car-vin', async (req, res) => {
     const result = await getPaidInspectKorea();
     
 
-    if (!result.initiate_report) {
-      const resp = await payFromBalanceRaw(result.vin, 'michaelllagami4@gmail.com');
+    if (result && !result.initiate_report) {
+      
+      const email = await getAppSettings('check_car_vin_email');
+      
+      const resp = await payFromBalanceRaw(result.vin, email.prop_value);
 
       if (
         resp &&
@@ -1420,7 +1427,7 @@ app.post('/api/generate-check-car-vin', async (req, res) => {
     const result2 = await getPaidInspectKorea();
 
 
-    if (result.initiate_report && !result.report_generated) {
+    if (result && result.initiate_report && !result.report_generated) {
       const resp2 = await checkReportStatusRaw({
         vin: result.vin,
         user_id: result.checkcarvin_user_id,
@@ -1464,10 +1471,12 @@ app.post('/api/report-status-check-car-vin', async (req, res) => {
   try {
   
     const result2 = await getPaidInspectKorea();
-
-    const resp = downloadCheckCarVinPdf(result2.report_uuid)
-
-    return res.status(200).json(resp);
+    console.log(result2);
+    if(result2 && result2.report_uuid){
+      const resp = await downloadCheckCarVinPdf(result2.report_uuid)
+        return res.status(200).json(resp);
+    }
+    return res.status(200).json({message : 'no report for report parsing'});
 
   } catch (error) {
     console.error('Error inspection:', error.response?.data || error.message);
@@ -1479,6 +1488,10 @@ app.post('/api/parse-report-check-car-vin', async (req, res) => {
   try {
   
     const result2 = await getPaidInspectKorea();
+    console.log(result2);
+    if(!result2){
+          return res.status(200).json({message : 'no report for report PDF'});
+    }
     const reportId = result2.report_uuid.replace(/-/g, '');
   
     const pdfPath = path.resolve(__dirname, `uploads\\${reportId}.pdf`);
@@ -1528,8 +1541,12 @@ app.post('/api/parse-report-check-car-vin', async (req, res) => {
 app.post('/api/login-check-car-vin', async (req, res) => {
   try {
 
-    
-    const { token, user } = await loginCheckCarVin('michaelllagami4@gmail.com', 'Demo2025@@');
+
+    const email = await getAppSettings('check_car_vin_email');
+
+    const password = await getAppSettings('check_car_vin_password');
+
+    const { token, user } = await loginCheckCarVin(email.prop_value, password.prop_value);
     console.log('Login token:', token);
     console.log('User:', user);
     await updateAppSettings('check_car_vin_token', token);

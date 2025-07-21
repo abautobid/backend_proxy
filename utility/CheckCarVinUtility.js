@@ -277,7 +277,7 @@ async function loginCheckCarVin(email, password) {
   await new Promise(resolve => setTimeout(resolve, 7000));
 
   const payload = { email, password, device_name: 'Mozilla/5.0 Chrome/114.0.0.0' };
-
+  console.log(payload);
   const response = await page.evaluate(async (payload) => {
     try {
       const res = await fetch('https://api.checkcar.vin/api/v1/auth/login', {
@@ -296,7 +296,7 @@ async function loginCheckCarVin(email, password) {
   }, payload);
 
   await browser.close();
-
+  console.log(response)
   // Log and return
   await logCheckCarVinRequest({
     url: 'auth/login',
