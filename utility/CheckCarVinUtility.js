@@ -280,8 +280,9 @@ async function loginCheckCarVin(email, password) {
     timeout: 60000,
   });
 
-  // Wait extra time to be safe
-  await new Promise(resolve => setTimeout(resolve, 9000));
+  
+  await new Promise(resolve => setTimeout(resolve, 15000));
+
 
   const response = await page.evaluate(async ({ email, password }) => {
     try {
