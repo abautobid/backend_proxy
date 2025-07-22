@@ -661,7 +661,7 @@ async function saveCheckCarVinInspection(inspectionObj) {
 }
 
 
-async function getPaidInspectKorea(){
+async function getInspectKoreaByStatus(status = 'paid'){
   // Step 1: Fetch from check_car_vin_inspection
   const { data: vinRecords, error: vinError } = await supabase
     .from('check_car_vin_inspection')
@@ -793,7 +793,7 @@ module.exports = {
     getResellerCountsByStatus,
     logCheckCarVinRequest,
     saveCheckCarVinInspection,
-    getPaidInspectKorea,
+    getInspectKoreaByStatus,
     updateCheckCarVinInspection,
     updateAppSettings,
     getAppSettings,

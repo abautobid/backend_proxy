@@ -20,7 +20,7 @@ const admin = require('./routes/admin');
 
 const { saveInspection,getInspectionsForInspectCar,
         getInspectionById,updateInspection, getUserById, saveCheckCarVinInspection,
-        getPaidInspectKorea,updateCheckCarVinInspection, updateAppSettings,
+        getInspectKoreaByStatus,updateCheckCarVinInspection, updateAppSettings,
         getAppSettings,getCheckCarVinInspectionByInspectionId
       } = require('./utility/supabaseUtility');
 const { sendEmailReport } = require('./utility/helper');
@@ -1390,7 +1390,7 @@ app.post('/api/get-check-car-vin', async (req, res) => {
 app.post('/api/generate-check-car-vin', async (req, res) => {
   try {
     
-    const result = await getPaidInspectKorea();
+    const result = await getInspectKoreaByStatus('paid');
     
 
     if (result && !result.initiate_report) {
@@ -1416,6 +1416,12 @@ app.post('/api/generate-check-car-vin', async (req, res) => {
           checkcarvin_user_id : userId,
         });
 
+         await updateInspection({
+              id: result.inspection_id,
+              status: 'report initiated',
+              
+          });
+
         console.log('Payment success, report ID:', reportId);
 
       } else {
@@ -1424,7 +1430,7 @@ app.post('/api/generate-check-car-vin', async (req, res) => {
     }
 
 
-    const result2 = await getPaidInspectKorea();
+    const result2 = await getInspectKoreaByStatus('report initiated');
 
 
     if (result && result.initiate_report && !result.report_generated) {
@@ -1448,9 +1454,15 @@ app.post('/api/generate-check-car-vin', async (req, res) => {
 
         await updateCheckCarVinInspection(result.id, {
           report_generated: true,
-          report_uuid: generatedReportId
+          report_uuid: generatedReportId,
+            report_generated_on: new Date().toISOString()
         });
 
+        await updateInspection({
+            id: result2.inspection_id,
+            status: 'report generated',
+            
+        });
         console.log('✅ Report generated successfully:', generatedReportId);
       } else {
         console.warn('⚠️ Report not yet generated or failed:', resp2);
@@ -1470,11 +1482,26 @@ app.post('/api/generate-check-car-vin', async (req, res) => {
 app.post('/api/report-status-check-car-vin', async (req, res) => {
   try {
   
-    const result2 = await getPaidInspectKorea();
+    const result2 = await getInspectKoreaByStatus('report generated');
     console.log(result2);
     if(result2 && result2.report_uuid){
-      const resp = await downloadCheckCarVinPdf(result2.report_uuid)
-        return res.status(200).json(resp);
+
+       const generatedAt = new Date(result2.report_generated_on);
+      const now = new Date();
+
+      const diffMs = now.getTime() - generatedAt.getTime();
+      const diffMinutes = diffMs / (1000 * 60);
+
+      if (diffMinutes >= 5) {        
+        const resp = await downloadCheckCarVinPdf(result2.report_uuid)
+        await updateInspection({
+              id: result2.inspection_id,
+              status: 'report downloaded',
+              
+          });
+
+          return res.status(200).json(resp);
+      }
     }
     return res.status(200).json({message : 'no report for report parsing'});
 
@@ -1487,7 +1514,7 @@ app.post('/api/report-status-check-car-vin', async (req, res) => {
 app.post('/api/parse-report-check-car-vin', async (req, res) => {
   try {
   
-    const result2 = await getPaidInspectKorea();
+    const result2 = await getInspectKoreaByStatus('report downloaded');
     console.log(result2);
     if(!result2){
           return res.status(200).json({message : 'no report for report PDF'});
