@@ -680,7 +680,7 @@ async function getInspectKoreaByStatus(status = 'paid'){
     .from('inspections')
     .select('*')
     .in('id', inspectionIds)
-    .eq('status', 'paid');
+    .eq('status', status);
 
   if (inspectionsError) {
     console.error('Error fetching inspections:', inspectionsError);
