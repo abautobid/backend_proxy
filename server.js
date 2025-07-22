@@ -1494,7 +1494,7 @@ app.post('/api/parse-report-check-car-vin', async (req, res) => {
     }
     const reportId = result2.report_uuid.replace(/-/g, '');
   
-    const pdfPath = path.resolve(__dirname, `uploads\\${reportId}.pdf`);
+    const pdfPath = path.resolve('var/data/uploads', `${reportId}.pdf`);
 
     const resp = await extractVehicleData(pdfPath)
 
