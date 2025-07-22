@@ -142,7 +142,7 @@ async function payFromBalanceRaw(vin, email) {
   await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36');
 
   console.log('[*] Navigating to checkcar.vin...');
-  await page.goto('https://checkcar.vin', {
+  await page.goto('https://api.checkcar.vin', {
     waitUntil: 'networkidle2',
     timeout: 60000,
   });
@@ -227,7 +227,7 @@ async function checkReportStatusRaw({ vin, user_id, reports, intent = "", cnt = 
   await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36');
 
   console.log('[*] Navigating to checkcar.vin...');
-  await page.goto('https://checkcar.vin', {
+  await page.goto('https://api.checkcar.vin', {
     waitUntil: 'networkidle2',
     timeout: 60000,
   });
@@ -305,8 +305,8 @@ async function loginCheckCarVin(email, password) {
   
   await new Promise(resolve => setTimeout(resolve, 15000));
 
-  const xToken = 'eyJpdiI6Ilp1Uzl5Z0RzUTltbXk0SnhRZks3QkE9PSIsInZhbHVlIjoicWZqT2hPKzdDZUtOazRCSjV1empXYk5QU2R3RWpndWRzRjBTZ2JXOStuL2dIMTBsbjFuZFNQc1N3UE13RFc3Wjl2UGxVYnFBbFdMY283QnMzeUh3OElFRXp3VFRodVVzekNOMk9KS2dCQ2hRZ05kWStlcjk3Y2hSbnpNanJVSnciLCJtYWMiOiI4OGU1NTZmNzJlZTNjMTU5ODc1ZjE2OWU2MzdiYzM4YjcwNzI5MDk3NTFjMjNiZjQ0NTEwYThmMmJlNmQ1ZDZjIiwidGFnIjoiIn0%3D';
-    const xsrfToken = decodeURIComponent(xToken);
+  const xToken = await getCheckCarVinXSRFToken();
+  const xsrfToken = decodeURIComponent(xToken);
 
   const response = await page.evaluate(async ({xsrfToken, token, email, password }) => {
     try {
@@ -370,7 +370,7 @@ async function downloadCheckCarVinPdf(reportIdRaw) {
   await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36');
 
   console.log('[*] Navigating to checkcar.vin...');
-  await page.goto('https://checkcar.vin', {
+  await page.goto('https://api.checkcar.vin', {
     waitUntil: 'networkidle2',
     timeout: 60000,
   });
