@@ -20,6 +20,11 @@ async function getCheckCarVinReportToken() {
     return token.prop_value;
 }
 
+async function getCheckCarVinXSRFToken() {
+    const token = await getAppSettings('check_car_vin_xsrf_token');
+    return token.prop_value;
+}
+
 
 async function getStoreCheckedVinRaw(vin) {
     const auth_token = await getCheckCarVinToken('check_car_vin_token');
@@ -48,7 +53,8 @@ async function getStoreCheckedVinRaw(vin) {
     await new Promise(resolve => setTimeout(resolve, 15000));
 
 
-    const xToken = 'eyJpdiI6Ilp1Uzl5Z0RzUTltbXk0SnhRZks3QkE9PSIsInZhbHVlIjoicWZqT2hPKzdDZUtOazRCSjV1empXYk5QU2R3RWpndWRzRjBTZ2JXOStuL2dIMTBsbjFuZFNQc1N3UE13RFc3Wjl2UGxVYnFBbFdMY283QnMzeUh3OElFRXp3VFRodVVzekNOMk9KS2dCQ2hRZ05kWStlcjk3Y2hSbnpNanJVSnciLCJtYWMiOiI4OGU1NTZmNzJlZTNjMTU5ODc1ZjE2OWU2MzdiYzM4YjcwNzI5MDk3NTFjMjNiZjQ0NTEwYThmMmJlNmQ1ZDZjIiwidGFnIjoiIn0%3D';
+    //const xToken = 'eyJpdiI6Ilp1Uzl5Z0RzUTltbXk0SnhRZks3QkE9PSIsInZhbHVlIjoicWZqT2hPKzdDZUtOazRCSjV1empXYk5QU2R3RWpndWRzRjBTZ2JXOStuL2dIMTBsbjFuZFNQc1N3UE13RFc3Wjl2UGxVYnFBbFdMY283QnMzeUh3OElFRXp3VFRodVVzekNOMk9KS2dCQ2hRZ05kWStlcjk3Y2hSbnpNanJVSnciLCJtYWMiOiI4OGU1NTZmNzJlZTNjMTU5ODc1ZjE2OWU2MzdiYzM4YjcwNzI5MDk3NTFjMjNiZjQ0NTEwYThmMmJlNmQ1ZDZjIiwidGFnIjoiIn0%3D';
+    const xToken = await getCheckCarVinXSRFToken();
     const xsrfToken = decodeURIComponent(xToken);
     
 
@@ -172,15 +178,19 @@ async function payFromBalanceRaw(vin, email) {
     }
   };
 
+  const xToken = await getCheckCarVinXSRFToken();
+  const xsrfToken = decodeURIComponent(xToken);
+
   console.log('[*] Sending payment request...');
-  const response = await page.evaluate(async ({ token, payload }) => {
+  const response = await page.evaluate(async ({ xsrfToken, token, payload }) => {
     try {
       const res = await fetch('https://api.checkcar.vin/api/v1/dashboard/pay-from-balance', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': token,
-          'Accept': 'application/json'
+          'Accept': 'application/json',
+          'x-xsrf-token': xsrfToken,
         },
         body: JSON.stringify(payload)
       });
@@ -188,7 +198,7 @@ async function payFromBalanceRaw(vin, email) {
     } catch (err) {
       return { error: 'Request failed', message: err.message };
     }
-  }, { token, payload });
+  }, { xsrfToken, token, payload });
 
   await browser.close();
 
@@ -234,15 +244,18 @@ async function checkReportStatusRaw({ vin, user_id, reports, intent = "", cnt = 
   };
 
   console.log('[*] Sending status check request...');
+	const xToken = await getCheckCarVinXSRFToken();
+  const xsrfToken = decodeURIComponent(xToken);
 
-  const response = await page.evaluate(async ({ token, payload }) => {
+  const response = await page.evaluate(async ({ xsrfToken, token, payload }) => {
     try {
       const res = await fetch('https://api.checkcar.vin/api/v1/report/stripe-check-status-report', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': token,
-          'Accept': 'application/json'
+          'Accept': 'application/json',
+          'x-xsrf-token': xsrfToken,
         },
         body: JSON.stringify(payload)
       });
@@ -251,7 +264,7 @@ async function checkReportStatusRaw({ vin, user_id, reports, intent = "", cnt = 
     } catch (err) {
       return { error: 'Request failed', message: err.message };
     }
-  }, { token, payload });
+  }, {xsrfToken,  token, payload });
 
   await browser.close();
 
@@ -367,12 +380,17 @@ async function downloadCheckCarVinPdf(reportIdRaw) {
 
 
   console.log('[*] Downloading PDF inside browser context...');
-  const base64Pdf = await page.evaluate(async ({ pdfUrl, token }) => {
+
+  const xToken = await getCheckCarVinXSRFToken();
+  const xsrfToken = decodeURIComponent(xToken);
+
+  const base64Pdf = await page.evaluate(async ({xsrfToken, pdfUrl, token }) => {
   const res = await fetch(pdfUrl, {
     method: 'GET',
     headers: {
       'Authorization': token,
-      'Accept': 'application/pdf'
+      'Accept': 'application/pdf',
+      	'x-xsrf-token': xsrfToken,
     }
   });
 
@@ -389,7 +407,7 @@ async function downloadCheckCarVinPdf(reportIdRaw) {
     reader.onerror = () => reject({ error: true, message: 'Failed to read blob as base64' });
     reader.readAsDataURL(blob);
   });
-}, { pdfUrl, token });
+}, { xsrfToken, pdfUrl, token });
 
   if (base64Pdf.error) {
     await browser.close();
