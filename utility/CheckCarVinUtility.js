@@ -415,7 +415,7 @@ async function downloadCheckCarVinPdf(reportIdRaw) {
   }
 
   // Convert base64 back to Buffer and save
-  const filePath = path.resolve('var/data/uploads', `${reportId}.pdf`);
+  const filePath = path.resolve(__dirname, `../uploads/${reportId}.pdf`);
   const pdfBuffer = Buffer.from(base64Pdf.base64, 'base64');
   fs.writeFileSync(filePath, pdfBuffer);
 
