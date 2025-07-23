@@ -1433,11 +1433,11 @@ app.post('/api/generate-check-car-vin', async (req, res) => {
     const result2 = await getInspectKoreaByStatus('report initiated');
 
 
-    if (result && result.initiate_report && !result.report_generated) {
+    if (result2 && result2.initiate_report && !result2.report_generated) {
       const resp2 = await checkReportStatusRaw({
-        vin: result.vin,
-        user_id: result.checkcarvin_user_id,
-        reports: [result.report_id]
+        vin: result2.vin,
+        user_id: result2.checkcarvin_user_id,
+        reports: [result2.report_id]
       });
 
       if (
@@ -1452,7 +1452,7 @@ app.post('/api/generate-check-car-vin', async (req, res) => {
         const generatedReport = resp2.reports[0];
         const generatedReportId = generatedReport.id;
 
-        await updateCheckCarVinInspection(result.id, {
+        await updateCheckCarVinInspection(result2.id, {
           report_generated: true,
           report_uuid: generatedReportId,
             report_generated_on: new Date().toISOString()
