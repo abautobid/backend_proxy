@@ -1560,6 +1560,13 @@ app.post('/api/parse-report-check-car-vin', async (req, res) => {
     
 
   } catch (error) {
+    
+    
+    await updateInspection({
+        id: result2.inspection_id,
+        status: 'report generated',
+        
+    });
     console.error('Error inspection:', error.response?.data || error.message);
     res.status(500).json({ error: 'Invalid request.' });
   }

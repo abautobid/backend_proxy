@@ -431,11 +431,15 @@ function removeNullChars(obj) {
     return obj.map(removeNullChars);
   } else if (typeof obj === 'object' && obj !== null) {
     return Object.fromEntries(
-      Object.entries(obj).map(([k, v]) => [k, removeNullChars(v)])
+      Object.entries(obj).map(([k, v]) => [
+        typeof k === 'string' ? k.replace(/\u0000/g, '') : k,
+        removeNullChars(v)
+      ])
     );
   }
   return obj;
 }
+
 
 
 
