@@ -211,65 +211,56 @@ async function extractVehicleData(filePath) {
 	}
 
     // Handle Vehicle Specifications section
-    if (line === 'Vehicle Specifications') {
-      const specKeys = [
-        'Year', 'Country', 'Make', 'Model', 'Body', 'Doors', 'Color',
-        'Engine capacity', 'Standard', 'Fuel type', 'Drive Type',
-        'Transmission', 'Keys', 'Height', 'Length', 'Width'
-      ];
+	if (line === 'Vehicle Specifications') {
+  const specKeys = {
+    'year': 'year',
+    'country': 'country',
+    'make': 'make',
+    'model': 'model',
+    'body': 'body',
+    'doors': 'doors',
+    'color': 'color',
+    'engine capacity': 'engine_capacity',
+    'standard seating': 'standard_seating',
+    'fuel type': 'fuel_type',
+    'drive type': 'drive_type',
+    'transmission': 'transmission',
+    'keys': 'keys',
+    'height': 'height',
+    'length': 'length',
+    'width': 'width'
+  };
 
-      const specs = {};
-      let j = i + 1;
+  const specs = {};
+  let j = i + 1;
 
-      while (j < lines.length && !lines[j].startsWith('Advanced Safety Devices')) {
-        const specLine = lines[j].trim();
+  while (j < lines.length && !lines[j].startsWith('Advanced Safety Devices')) {
+    const rawLine = lines[j].replace(/\u0000/g, '').trim();
 
-        for (const key of specKeys) {
-          const keyNoSpace = key.replace(/\s+/g, '');
-          if (specLine.startsWith(keyNoSpace)) {
-            const value = specLine.slice(keyNoSpace.length).trim();
-            const normalizedKey = key.toLowerCase().replace(/\s+/g, '_');
-            specs[normalizedKey] = value;
-            break;
-          }
-        }
+    for (const label in specKeys) {
+      // Match both spaced and glued formats
+      const pattern = new RegExp(`^${label.replace(/\s+/g, '')}(.*)$`, 'i');
+      const altPattern = new RegExp(`^${label}(.*)$`, 'i');
+      
+      let match = rawLine.match(pattern) || rawLine.match(altPattern);
 
-        j++;
+      if (match) {
+        specs[specKeys[label]] = match[1].trim();
+        break;
       }
-
-      report.vehicle_specifications = specs;
     }
+
+    j++;
+  }
+
+  report.vehicle_specifications = specs;
+}
+
 	
-	    // Handle Advanced Safety Devices section
-        // Handle Advanced Safety Devices section (ends before "Ownership history")
-    if (line === 'Advanced Safety Devices') {
-      const safetyFeatures = {};
-      let j = i;
-      while (j < lines.length) {
-        const key = lines[j]?.trim();
-        const value = lines[j + 1]?.trim();
-
-        // End if we reach ownership history or key/value not valid
-        if (!key || !value || key === 'Ownership history') break;
-
-        // Stop if line is not followed by a value
-        if (!lines[j + 1] || lines[j + 1] === 'Ownership history') break;
-
-        // Normalize key
-        const normalizedKey = key
-          .toLowerCase()
-          .replace(/\s+/g, '_')
-          .replace(/[()]/g, '')
-          .replace(/__+/g, '_');
-
-        safetyFeatures[normalizedKey] = value;
-
-        j += 2;
-      }
-
-      report.advanced_safety_systems = safetyFeatures;
-    }
-	
+	    
+	if (line === 'Advanced Safety Devices') {
+	  report.advanced_safety_systems = await extractAdvancedSafetyDevices(lines.slice(i));
+	}
 
 	if (line === 'Ownership history') {
 	  const owners = [];
@@ -479,6 +470,40 @@ async function extractTechnicalInspection(lines) {
 
   return result;
 }
+
+function extractAdvancedSafetyDevices(lines) {
+  const safetyFeatures = {};
+  const startIndex = lines.findIndex(line => line.trim() === 'Advanced Safety Devices');
+  if (startIndex === -1) return safetyFeatures;
+
+  for (let i = startIndex + 1; i < lines.length; i += 2) {
+    const keyLine = lines[i]?.trim();
+    const valueLine = lines[i + 1]?.trim();
+
+    if (!keyLine || !valueLine) break;
+
+    // Skip lines like "5 installed"
+    if (/^\d+\s+installed$/i.test(keyLine)) {
+      i--; // adjust index back
+      continue;
+    }
+
+    // Stop if we reached the next section
+    if (keyLine === 'Ownership history') break;
+
+    const normalizedKey = keyLine
+      .toLowerCase()
+      .replace(/[()]/g, '')
+      .replace(/\s+/g, '_')
+      .replace(/__+/g, '_');
+
+    safetyFeatures[normalizedKey] = valueLine;
+  }
+
+  return safetyFeatures;
+}
+
+
 
 
 
