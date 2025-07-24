@@ -29,6 +29,7 @@ const { getStoreCheckedVin, payFromBalanceRaw,checkReportStatusRaw, loginCheckCa
 const { supabase } = require('./lib/supabaseClient.js');
 
 const { extractVehicleData } = require('./utility/checkCarVinPDFParser');
+const {   uploadPdfToPdfCo, convertPdfToJsonAsync,normalizeKeys, cleanValues} = require('./utility/pdfCoUtility.js');
 
 
 const router = express.Router();
@@ -1523,8 +1524,56 @@ app.post('/api/parse-report-check-car-vin', async (req, res) => {
   
     const pdfPath = path.resolve(__dirname, `uploads/${reportId}.pdf`);
 
-    const resp = await extractVehicleData(pdfPath)
+    const pdfUrl = await uploadPdfToPdfCo(pdfPath)
+    if(pdfUrl == null){
+       return res.status(500).json({'error' : 'PDF uploading error occurred on PDF.co'});
+    }
 
+    const resp = await convertPdfToJsonAsync(pdfUrl);
+
+
+    if (
+        resp &&
+        typeof resp === 'object' &&
+        !Array.isArray(resp) &&
+        resp["Vehicle Information"] &&
+        resp["Vehicle Information"].Model &&
+        resp["Vehicle Information"].Year
+      ) {
+        
+        const inspection = await getInspectionById(result2.inspection_id);    
+
+        const baseUrl = process.env.WEB_APP_BASE_URL;
+        
+        
+
+        const safeResp = removeNullChars(resp)
+
+        await updateCheckCarVinInspection(result2.id, {
+          report_data: safeResp,
+        });
+
+        await updateInspection({
+              id: result2.inspection_id,
+              status: 'completed',
+              
+          });
+        
+        const shortUrl = baseUrl + `inspect-car/korea-report/?id=${inspection.id}`
+        
+        sendInspectionKoreaReport({vin : inspection.plate_number, email : inspection.email, short_link : shortUrl})
+
+      
+        console.log("Valid JSON object");
+      
+    } else {
+      console.log("Not a valid JSON object");
+    }
+
+
+    /*
+    const resp = await extractVehicleData(pdfPath)
+    
     if (resp && typeof resp === 'object' && !Array.isArray(resp) && resp.model && resp.year) {
         
         const inspection = await getInspectionById(result2.inspection_id);    
@@ -1556,17 +1605,14 @@ app.post('/api/parse-report-check-car-vin', async (req, res) => {
       console.log("Not a valid JSON object");
     }
 
+    */
+
     return res.status(200).json(resp);
     
 
   } catch (error) {
     
-    
-    await updateInspection({
-        id: result2.inspection_id,
-        status: 'report generated',
-        
-    });
+
     console.error('Error inspection:', error.response?.data || error.message);
     res.status(500).json({ error: 'Invalid request.' });
   }
@@ -1609,7 +1655,9 @@ app.post('/api/get-korea-report', async (req, res) => {
 
     }else{
         const checkCarVinData = await getCheckCarVinInspectionByInspectionId(inspection.id)
-        res.status(200).json(checkCarVinData.report_data);
+        const normalizeResp = normalizeKeys(checkCarVinData.report_data);
+        const cleanResp = cleanValues(normalizeResp);
+        res.status(200).json(cleanResp);
     }    
 
   } catch (error) {
