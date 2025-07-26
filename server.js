@@ -23,9 +23,11 @@ const { saveInspection,getInspectionsForInspectCar,
         getInspectKoreaByStatus,updateCheckCarVinInspection, updateAppSettings,
         getAppSettings,getCheckCarVinInspectionByInspectionId
       } = require('./utility/supabaseUtility');
-const { sendEmailReport } = require('./utility/helper');
+const { sendEmailReport, isValidPdf} = require('./utility/helper');
 const { getPayedDataQuery,vinCheck} = require('./utility/cebiaUtility');
-const { getStoreCheckedVin, payFromBalanceRaw,checkReportStatusRaw, loginCheckCarVin,downloadCheckCarVinPdf, removeNullChars} = require('./utility/CheckCarVinUtility');
+const { getStoreCheckedVin, payFromBalanceRaw,checkReportStatusRaw, 
+        generateTokensForAllAccounts,downloadCheckCarVinPdf, removeNullChars,
+         incrementAccountUsage, getLatestTokenAccount,getAvailableAccount} = require('./utility/CheckCarVinUtility');
 const { supabase } = require('./lib/supabaseClient.js');
 
 const { extractVehicleData } = require('./utility/checkCarVinPDFParser');
@@ -1002,8 +1004,14 @@ app.post('/api/inspect-car-korea', async (req, res) => {
       
     if (!inspection || inspection.length === 0) {
 
+      const account = await getLatestTokenAccount();
+
+      if (!account) {
+          console.warn('No valid account with token found.');
+          return res.status(200).json({ error: "VIN i pavlefshëm. Ju lutem provoni me një të vlefshëm." });
+      }
       
-       const checkCarVin = await getStoreCheckedVin(vin);
+       const checkCarVin = await getStoreCheckedVin(vin, account);
 
         if(!checkCarVin.vehicle){
             return res.status(200).json({ error: "VIN i pavlefshëm. Ju lutem provoni me një të vlefshëm." });
@@ -1396,37 +1404,47 @@ app.post('/api/generate-check-car-vin', async (req, res) => {
 
     if (result && !result.initiate_report) {
       
-      const email = await getAppSettings('check_car_vin_email');
       
-      const resp = await payFromBalanceRaw(result.vin, email.prop_value);
 
-      if (
-        resp &&
-        resp.status === 200 &&
-        resp.message === 'Payment successful!' &&
-        Array.isArray(resp.reports) &&
-        resp.reports.length > 0
-      ) {
-        const reportId = resp.reports[0];
-        const userId = resp.user_id;
+      const account = await getAvailableAccount();
+      if (!account) {
+        console.warn('[!] Skipping payment — No account available with remaining limit');
+        return res.status(200).json({message: 'No available account with daily limit remaining' });
+      }else{
+      
+        const resp = await payFromBalanceRaw(result.vin, account);
+
+        if (
+          resp &&
+          resp.status === 200 &&
+          resp.message === 'Payment successful!' &&
+          Array.isArray(resp.reports) &&
+          resp.reports.length > 0
+        ) {
+          await incrementAccountUsage(account.id);
 
 
-        await updateCheckCarVinInspection(result.id, {
-          report_id: reportId,
-          initiate_report: true,
-          checkcarvin_user_id : userId,
-        });
+          const reportId = resp.reports[0];
+          const userId = resp.user_id;
 
-         await updateInspection({
-              id: result.inspection_id,
-              status: 'report initiated',
-              
+
+          await updateCheckCarVinInspection(result.id, {
+            report_id: reportId,
+            initiate_report: true,
+            checkcarvin_user_id : userId,
+            checkcarvin_account_id : account.id,
           });
 
-        console.log('Payment success, report ID:', reportId);
+          await updateInspection({
+                id: result.inspection_id,
+                status: 'report initiated',
+              });
 
-      } else {
-        console.error('Payment failed or invalid response:', resp);
+          console.log('Payment success, report ID:', reportId);
+
+        } else {
+          console.error('Payment failed or invalid response:', resp);
+        }
       }
     }
 
@@ -1495,13 +1513,15 @@ app.post('/api/report-status-check-car-vin', async (req, res) => {
 
       if (diffMinutes >= 5) {        
         const resp = await downloadCheckCarVinPdf(result2.report_uuid)
-        await updateInspection({
+        if(resp){
+          await updateInspection({
               id: result2.inspection_id,
               status: 'report downloaded',
               
           });
+        }
 
-          return res.status(200).json(resp);
+        return res.status(200).json({valid_pdf_downloaded: resp});
       }
     }
     return res.status(200).json({message : 'no report for report parsing'});
@@ -1524,10 +1544,23 @@ app.post('/api/parse-report-check-car-vin', async (req, res) => {
   
     const pdfPath = path.resolve(__dirname, `uploads/${reportId}.pdf`);
 
+    const isValid = await isValidPdf(pdfPath)
+    if (!isValid) {
+      console.log('❌ Skipped: Invalid PDF (probably JSON placeholder)');
+      return res.status(400).json({ error: 'File is not a valid PDF' });
+    }
+
+    
     const pdfUrl = await uploadPdfToPdfCo(pdfPath)
     if(pdfUrl == null){
        return res.status(500).json({'error' : 'PDF uploading error occurred on PDF.co'});
     }
+
+    await updateInspection({
+        id: result2.inspection_id,
+        status: 'report uploaded to pdfco',
+        
+    });
 
     const resp = await convertPdfToJsonAsync(pdfUrl);
 
@@ -1620,18 +1653,7 @@ app.post('/api/parse-report-check-car-vin', async (req, res) => {
 
 app.post('/api/login-check-car-vin', async (req, res) => {
   try {
-
-
-    const email = await getAppSettings('check_car_vin_email');
-
-    const password = await getAppSettings('check_car_vin_password');
-
-    const { token, user } = await loginCheckCarVin(email.prop_value, password.prop_value);
-    console.log('Login token:', token);
-    console.log('User:', user);
-    await updateAppSettings('check_car_vin_token', token);
-    return res.status(200).json({token : token});
-
+      await generateTokensForAllAccounts();
   } catch (error) {
     console.error('Error inspection:', error.response?.data || error.message);
     res.status(500).json({ error: 'Invalid request.' });

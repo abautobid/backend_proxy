@@ -1,4 +1,5 @@
 const nodemailer = require('nodemailer');
+const fs = require('fs');
 
 
 
@@ -53,6 +54,13 @@ async function sendEmailReport(email, short_link) {
     return false;
 }
 
+async function isValidPdf(filePath) {
+  if (!fs.existsSync(filePath)) return false;
+  const buffer = fs.readFileSync(filePath);
+  return buffer.slice(0, 4).toString() === '%PDF';
+}
+
 module.exports = {
-    sendEmailReport
+    sendEmailReport,
+    isValidPdf
 };

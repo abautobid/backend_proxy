@@ -64,7 +64,7 @@ async function convertPdfToJsonAsync(pdfUrl) {
     const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
     for (let i = 0; i < 20; i++) {
-      await delay(3000); // wait 3 sec
+      await delay(3 * 60 * 1000); 
       const jobStatusRes = await axios.get(`${PDFCO_BASE_URL}/job/check?jobid=${jobId}`, {
         headers: { 'x-api-key': PDFCO_API_KEY }
       });

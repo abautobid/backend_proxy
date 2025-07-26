@@ -3,9 +3,12 @@ const qs = require('qs');
 const puppeteer = require('puppeteer');
 const { supabase } = require('../lib/supabaseClient.js');
 const { logCheckCarVinRequest, getAppSettings} = require('./supabaseUtility');
+const { isValidPdf } = require('./helper.js');
+
 const fs = require('fs');
 const path = require('path');
 
+const DAILY_LIMIT = parseInt(process.env.CHECKCARVIN_DAILY_LIMIT || '15', 10);
 
 
 
@@ -26,8 +29,8 @@ async function getCheckCarVinXSRFToken() {
 }
 
 
-async function getStoreCheckedVinRaw(vin) {
-    const auth_token = await getCheckCarVinToken('check_car_vin_token');
+async function getStoreCheckedVinRaw(vin, account) {
+    const auth_token = account.token;
     const token = `Bearer ${auth_token}`;
 
     const browser = await puppeteer.launch({
@@ -85,9 +88,9 @@ async function getStoreCheckedVinRaw(vin) {
 
 
 
-async function getStoreCheckedVin(vin) {
+async function getStoreCheckedVin(vin, account) {
   
-    let resp = await getStoreCheckedVinRaw(vin);
+    let resp = await getStoreCheckedVinRaw(vin, account);
 
     // Check if it's a stringified JSON object and parse it
     if (typeof resp === 'string') {
@@ -127,18 +130,19 @@ async function getStoreCheckedVin(vin) {
 
 
 
-async function payFromBalanceRaw(vin, email) {
-    const auth_token = await getCheckCarVinToken('check_car_vin_token');
-    const token = `Bearer ${auth_token}`;
+async function payFromBalanceRaw(vin, account) {
+
+  
+  const token = `Bearer ${account.token}`;
+  const email = account.email;
 
   const browser = await puppeteer.launch({
     headless: 'new',
     args: ['--no-sandbox', '--disable-setuid-sandbox'],
-     executablePath: puppeteer.executablePath(),
+    executablePath: puppeteer.executablePath(),
   });
 
   const page = await browser.newPage();
-
   await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36');
 
   console.log('[*] Navigating to checkcar.vin...');
@@ -178,8 +182,7 @@ async function payFromBalanceRaw(vin, email) {
     }
   };
 
-  const xToken = await getCheckCarVinXSRFToken();
-  const xsrfToken = decodeURIComponent(xToken);
+  const xsrfToken = decodeURIComponent(account.xsrf_token);
 
   console.log('[*] Sending payment request...');
   const response = await page.evaluate(async ({ xsrfToken, token, payload }) => {
@@ -201,6 +204,8 @@ async function payFromBalanceRaw(vin, email) {
   }, { xsrfToken, token, payload });
 
   await browser.close();
+
+
 
   await logCheckCarVinRequest({
     url: 'api/v1/dashboard/pay-from-balance',
@@ -420,7 +425,15 @@ async function downloadCheckCarVinPdf(reportIdRaw) {
   fs.writeFileSync(filePath, pdfBuffer);
 
   console.log(`[*] PDF saved at: ${filePath}`);
+
+  const isValid = await isValidPdf(filePath)
+  if (!isValid) {
+     console.log('❌ Skipped: Invalid PDF downloaded');
+     return false;
+  }
+
   await browser.close();
+  return true;
 }
 
 
@@ -443,6 +456,193 @@ function removeNullChars(obj) {
 
 
 
+async function generateTokensForAllAccounts() {
+  const { data: accounts, error } = await supabase
+    .from('checkcarvin_accounts')
+    .select('id, email, password');
+
+  if (error || !accounts) {
+    console.error('Failed to fetch accounts:', error?.message);
+    return;
+  }
+
+  const auth_token_report = await getCheckCarVinReportToken();
+  const token = `Bearer ${auth_token_report}`;
+  const xToken = await getCheckCarVinXSRFToken();
+  const xsrfToken = decodeURIComponent(xToken);
+
+  for (const account of accounts) {
+    console.log(`[*] Logging in: ${account.email}`);
+
+    const browser = await puppeteer.launch({
+      headless: 'new',
+      args: ['--no-sandbox', '--disable-setuid-sandbox'],
+      executablePath: puppeteer.executablePath(),
+    });
+
+    const page = await browser.newPage();
+    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36');
+    await page.goto('https://api.checkcar.vin', {
+      waitUntil: 'networkidle2',
+      timeout: 60000,
+    });
+    await new Promise(resolve => setTimeout(resolve, 15000));
+
+    const loginResponse = await page.evaluate(async ({ xsrfToken, token, email, password }) => {
+      try {
+        const res = await fetch('/api/v1/auth/login', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': token,
+            'Accept': 'application/json',
+            'x-xsrf-token': xsrfToken,
+          },
+          body: JSON.stringify({
+            email,
+            password,
+            device_name: 'Mozilla/5.0 Chrome/114.0.0.0'
+          })
+        });
+        const data = await res.json();
+        return { ok: true, data };
+      } catch (err) {
+        return { ok: false, error: err.message };
+      }
+    }, { xsrfToken, token, email: account.email, password: account.password });
+
+    await browser.close();
+
+    if (!loginResponse.ok || !loginResponse.data?.token) {
+      console.error(`[!] Login failed for ${account.email}:`, loginResponse.error || loginResponse.data);
+      continue;
+    }
+
+    const { token: newToken, xsrfToken: newXsrf } = loginResponse.data;
+
+    const { error: updateError } = await supabase
+      .from('checkcarvin_accounts')
+      .update({
+        token: newToken,
+        xsrf_token: newXsrf,
+        token_generated_at: new Date().toISOString(),
+      })
+      .eq('id', account.id);
+
+    if (updateError) {
+      console.error(`[!] Failed to update token for ${account.email}:`, updateError.message);
+    } else {
+      console.log(`[+] Token updated for ${account.email}`);
+    }
+
+    await logCheckCarVinRequest({
+      url: 'auth/login',
+      request: { email: account.email },
+      response: loginResponse.data,
+    });
+  }
+}
+
+
+// accountUtility.js
+async function getAvailableAccount() {
+  const today = new Date().toISOString().slice(0, 10);
+
+  const { data: accounts, error } = await supabase
+    .from('checkcarvin_accounts')
+    .select('*')
+    .order('last_used_at', { ascending: true });
+
+  if (error) throw new Error('Failed to fetch accounts: ' + error.message);
+
+  for (const acc of accounts) {
+    const lastUsedDate = acc.last_used_at?.toString().slice(0, 10);
+
+    if (lastUsedDate !== today) {
+      await supabase
+        .from('checkcarvin_accounts')
+        .update({
+          daily_report_count: 0,
+          last_used_at: new Date().toISOString()
+        })
+        .eq('id', acc.id);
+
+      acc.daily_report_count = 0;
+    }
+
+    if (acc.daily_report_count < DAILY_LIMIT) {
+      return acc;
+    }
+  }
+
+  return null; 
+}
+
+
+
+async function incrementAccountUsage(accountId) {
+  // First: Fetch current count
+  const { data: accountData, error: fetchError } = await supabase
+    .from('checkcarvin_accounts')
+    .select('daily_report_count')
+    .eq('id', accountId)
+    .single();
+
+  if (fetchError) {
+    console.error('[SUPABASE] Failed to fetch account for increment:', fetchError.message);
+    return null;
+  }
+
+  const currentCount = accountData.daily_report_count || 0;
+
+  // Second: Update with incremented value
+  const { data, error: updateError } = await supabase
+    .from('checkcarvin_accounts')
+    .update({
+      daily_report_count: currentCount + 1,
+      last_used_at: new Date().toISOString()
+    })
+    .eq('id', accountId);
+
+  if (updateError) {
+    console.error('[SUPABASE] Failed to increment account usage:', updateError.message);
+    return null;
+  }
+
+  return data;
+}
+
+
+// accountUtility.js
+
+async function getLatestTokenAccount() {
+  const { data: accounts, error } = await supabase
+    .from('checkcarvin_accounts')
+    .select('*')
+    .order('token_generated_at', { ascending: false }) // latest token first
+    .limit(1);
+
+  if (error) throw new Error('Failed to fetch latest token account: ' + error.message);
+
+  if (!accounts || accounts.length === 0) {
+    return null;
+  }
+
+  const account = accounts[0];
+
+  // Optional: Validate token freshness (e.g., not older than 1 day)
+  const generatedAt = new Date(account.token_generated_at);
+  const now = new Date();
+  const ageInHours = (now - generatedAt) / (1000 * 60 * 60);
+
+  if (ageInHours > 24) {
+    console.warn('[!] Latest token is older than 24 hours. Consider refreshing.');
+  }
+
+  return account;
+}
+
+
 module.exports = {
     getCheckCarVinToken,
     getStoreCheckedVin,
@@ -450,5 +650,9 @@ module.exports = {
     checkReportStatusRaw,
     loginCheckCarVin,
     downloadCheckCarVinPdf,
-    removeNullChars
+    removeNullChars,
+    generateTokensForAllAccounts,
+    getAvailableAccount,
+    incrementAccountUsage,
+    getLatestTokenAccount
 };
