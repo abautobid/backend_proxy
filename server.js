@@ -1716,31 +1716,38 @@ async function sendInspectionKoreaReport({ vin, email, short_link}) {
     const mailOptions = {
       from: `"24ABA Inspections" <${process.env.EMAIL_USER}>`,
       to: email,
-      subject: "🚗 Your Inspection Link is Ready!",
+      subject: "🚗 Lidhja juaj për inspektimin është gati!",
       html: `
-        <p>Hello,</p>
-        <p>Thank you for completing your payment!</p>
-        <p>Your car inspection is now ready. Click the button below to begin:</p>
+        <p>Përshëndetje,</p>
+        <p>Faleminderit për përfundimin e pagesës!</p>
+        <p>Inspektimi i makinës suaj është tani gati. Klikoni butonin më poshtë për të filluar:</p>
         <p style="text-align:center;">
           <a href="${short_link}" style="display:inline-block;padding:12px 24px;background-color:#e60023;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:bold;">
-            Open Full Report ${vin}
+            Hap Raportin e Plotë ${vin}
           </a>
         </p>
-        <p>If the button doesn't work, you can also click or paste this link:</p>
+        <p>Nëse butoni nuk funksionon, mund të klikoni ose kopjoni këtë link:</p>
         <p><a href="${short_link}">${short_link}</a></p>
-        <p>– 24ABA Team</p>
+        <p>– Ekipi 24ABA</p>
       `
     };
+
 
     await transporter.sendMail(mailOptions);
     console.log("📧 Inspection link email sent to", email);
 
 
   return true;
+
 }
 
+app.get('/api/test-email', async (req, res) => {
+   sendInspectionKoreaReport({vin : 'KMHJ3815GGU085263', email : 'ahsan.shaikh.hyd@gmail.com', short_link : 'https://24aba.com/beta-inspection/inspect-car/korea-report/?id=451673d9-13f3-42af-8896-6d4b5a65d951'})
+});
 
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ Backend proxy server is running on port ${PORT}`);
 });
+
+
