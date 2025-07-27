@@ -1021,6 +1021,10 @@ app.post('/api/inspect-car-korea', async (req, res) => {
             return res.status(200).json({ error: "VIN i pavlefshëm. Ju lutem provoni me një të vlefshëm." });
         }
 
+
+        if(checkCarVin.year.value == "-" || checkCarVin.year.value  < 2000 ){
+            return res.status(200).json({ error: "Na vjen keq , nuk u gjendën mjaftueshëm të dhëna për këtë automjet !" });
+        }
          const inspectionObj = {
             plate_number: vin,
             email: email,
