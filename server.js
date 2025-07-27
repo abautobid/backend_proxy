@@ -1123,9 +1123,11 @@ app.post('/api/payment-received', async (req, res) => {
               status: 'paid',
               
           });
+          /*
           if(inspection.vin_type == 'korea'){
             await sendInspectionKoreaEmail({vin: inspection.plate_number, email : inspection.email, inspectionId: inspection.id})
           }
+            */
     }
 
     return res.status(200).json({ inspectionId: inspection.id, message: "Inspection found.", vin_type : inspection.vin_type });
