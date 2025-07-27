@@ -1050,8 +1050,9 @@ app.post('/api/inspect-car-korea', async (req, res) => {
     }
 
     const checkCarVinData = await getCheckCarVinInspectionByInspectionId(inspection[0].id)
-
-      if(checkCarVin.meta.year.value == "-" || checkCarVin.meta.year.value  < 2000 ){
+    
+    const vinDetail = checkCarVinData.stored_vin_data;
+      if(vinDetail.meta.year.value == "-" || vinDetail.meta.year.value  < 2000 ){
           return res.status(200).json({ error: "Na vjen keq , nuk u gjendën mjaftueshëm të dhëna për këtë automjet !" });
       }
 
@@ -1726,7 +1727,7 @@ async function sendInspectionKoreaReport({ vin, email, short_link}) {
     const mailOptions = {
       from: `"24ABA Inspections" <${process.env.EMAIL_USER}>`,
       to: email,
-      subject: "🚗 Lidhja juaj për inspektimin është gati!",
+      subject: "🚗 Link juaj për inspektimin është gati!",
       html: `
         <p>Përshëndetje,</p>
         <p>Faleminderit për përfundimin e pagesës!</p>
