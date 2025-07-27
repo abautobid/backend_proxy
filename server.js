@@ -1022,7 +1022,7 @@ app.post('/api/inspect-car-korea', async (req, res) => {
         }
 
 
-        if(checkCarVin.year.value == "-" || checkCarVin.year.value  < 2000 ){
+        if(checkCarVin.meta.year.value == "-" || checkCarVin.meta.year.value  < 2000 ){
             return res.status(200).json({ error: "Na vjen keq , nuk u gjendën mjaftueshëm të dhëna për këtë automjet !" });
         }
          const inspectionObj = {
@@ -1050,6 +1050,10 @@ app.post('/api/inspect-car-korea', async (req, res) => {
     }
 
     const checkCarVinData = await getCheckCarVinInspectionByInspectionId(inspection[0].id)
+
+      if(checkCarVin.meta.year.value == "-" || checkCarVin.meta.year.value  < 2000 ){
+          return res.status(200).json({ error: "Na vjen keq , nuk u gjendën mjaftueshëm të dhëna për këtë automjet !" });
+      }
 
     return res.status(200).json({ 
         inspectionId: inspection[0].id, 
