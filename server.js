@@ -21,7 +21,7 @@ const admin = require('./routes/admin');
 const { saveInspection,getInspectionsForInspectCar,
         getInspectionById,updateInspection, getUserById, saveCheckCarVinInspection,
         getInspectKoreaByStatus,updateCheckCarVinInspection, updateAppSettings,
-        getAppSettings,getCheckCarVinInspectionByInspectionId
+        getAppSettings,getCheckCarVinInspectionByInspectionId,getUserByPromoCode
       } = require('./utility/supabaseUtility');
 const { sendEmailReport, isValidPdf} = require('./utility/helper');
 const { getPayedDataQuery,vinCheck} = require('./utility/cebiaUtility');
@@ -249,13 +249,10 @@ app.post('/api/create-payment-session', async (req, res) => {
     if (!inspection || inspection.length === 0) {
         return res.status(401).json({ error: "Invalid request found." });         
     }
-    const inspection_fee = 24.99;
-    const inspection_fee_stripe = 2499;
+    const inspection_fee = inspection.inspection_fee;
+    const inspection_fee_stripe = Math.round(inspection_fee * 100);
 
-    await updateInspection({
-        id: inspection.id,
-        inspection_fee: inspection_fee,
-    });
+
     
     const encryptedInspectionId = encrypt(inspection.id);
 
@@ -923,11 +920,22 @@ app.post('/api/login', async (req, res) => {
 
 app.post('/api/inspect-car', async (req, res) => {
   try {
-    const { email, vin} = req.body;
+    const { email, vin, promoCode} = req.body;
     if (!email) return res.status(400).json({ error: "Email is required" });
     if (!vin) return res.status(400).json({ error: "VIN is required" });
 
 
+    const inspectionFee = 24.99;
+
+    let promoDetails = null;
+
+
+    if(promoCode){
+      promoDetails = await getUserByPromoCode(promoCode);
+      if (!promoDetails) {
+          return res.status(200).json({ error: "Kodi promovues nuk është i vlefshëm."});
+      }
+    }
     const cebiaToken = await getCebiaToken();
     const carInfoResp = await vinCheck(vin, cebiaToken);
     if(!carInfoResp.isVinValid){
@@ -943,11 +951,14 @@ app.post('/api/inspect-car', async (req, res) => {
         return res.status(200).json({ error: "VIN i pavlefshëm. Ju lutem provoni me një të vlefshëm."});
     }
     
-    inspection = await getInspectionsForInspectCar(vin,email);
+    const inspection = await getInspectionsForInspectCar(vin,email);
     
     if (!inspection || inspection.length === 0) {
 
         const ip = req.headers['x-forwarded-for']?.split(',')[0] || req.socket?.remoteAddress || null;
+
+        const discountAmountNew = promoDetails?.promo_discount || 0;
+        const discountedFeeNew = Math.max(0, +(inspectionFee - discountAmountNew).toFixed(2));
 
          const inspectionObj = {
             plate_number: vin,
@@ -956,6 +967,11 @@ app.post('/api/inspect-car', async (req, res) => {
             model : carInfoResp.carInfo.model,
             brand : carInfoResp.carInfo.brand,
             ip_address: ip,
+            reseller_id :  promoDetails?.id || 0,
+            promo_code: promoCode || null,
+            discount: promoDetails?.promo_discount || 0,
+            inspection_fee: discountedFeeNew,
+            commission : promoDetails?.commission_rate || 0
             
         };
         const inspectionId = await saveInspection(inspectionObj);
@@ -968,6 +984,22 @@ app.post('/api/inspect-car', async (req, res) => {
 
     }
 
+
+    
+    const discountAmount = promoDetails?.promo_discount || 0;
+    const discountedFee = Math.max(0, +(inspectionFee - discountAmount).toFixed(2));
+
+  if(inspection[0].status == 'pending'){
+      await updateInspection({
+        id: inspection[0].id,
+        promo_code: promoCode || null,
+        discount: discountAmount,
+        inspection_fee: discountedFee,
+        commission : promoDetails?.commission_rate || 0,
+        reseller_id :  promoDetails?.id || 0,
+      });
+    }
+    
     return res.status(200).json({ 
         inspectionId: inspection[0].id, 
         message: "Inspection found.", 
@@ -992,13 +1024,23 @@ app.post('/api/inspect-car', async (req, res) => {
 
 app.post('/api/inspect-car-korea', async (req, res) => {
   try {
-    const { email, vin } = req.body;
+    const { email, vin, promoCode} = req.body;
     if (!email) return res.status(400).json({ error: "Email is required" });
     if (!vin) return res.status(400).json({ error: "VIN is required" });
 
+    const inspectionFee = 24.99;
 
+    let promoDetails = null;
+
+
+    if(promoCode){
+      promoDetails = await getUserByPromoCode(promoCode);
+      if (!promoDetails) {
+          return res.status(200).json({ error: "Kodi promovues nuk është i vlefshëm."});
+      }
+    }
     
-    inspection = await getInspectionsForInspectCar(vin,email);
+    const inspection = await getInspectionsForInspectCar(vin,email);
     
    
       
@@ -1025,11 +1067,22 @@ app.post('/api/inspect-car-korea', async (req, res) => {
         if(checkCarVin.meta.year.value == "-" || checkCarVin.meta.year.value  < 2000 ){
             return res.status(200).json({ error: "Na vjen keq , nuk u gjendën mjaftueshëm të dhëna për këtë automjet !" });
         }
+
+        const discountAmountNew = promoDetails?.promo_discount || 0;
+        const discountedFeeNew = Math.max(0, +(inspectionFee - discountAmountNew).toFixed(2));
+
+
+
          const inspectionObj = {
             plate_number: vin,
             email: email,
             status: 'pending',
-            vin_type: 'korea'        
+            vin_type: 'korea',
+            reseller_id :  promoDetails?.id || 0,
+            promo_code: promoCode || null,
+            discount: promoDetails?.promo_discount || 0,
+            inspection_fee: discountedFeeNew,
+            commission : promoDetails?.commission_rate || 0        
         };
         const inspectionId = await saveInspection(inspectionObj);
 
@@ -1042,7 +1095,7 @@ app.post('/api/inspect-car-korea', async (req, res) => {
         await saveCheckCarVinInspection(checkCarVinInspectionObj)
 
         if (inspectionId) {
-             return res.status(200).json({ inspectionId: inspectionId, message: "Inspection submitted successfully", status : 'pending', vin_detail: checkCarVin });
+             return res.status(200).json({ inspectionId: inspectionId, message: "Inspection submitted successfully", status : 'pending', vin_detail: checkCarVin, inspection_fee :discountedFeeNew, discount: promoDetails?.promo_discount || 0 });
         }else{
              return res.status(200).json({ error: "Kërkesa juaj nuk mund të përpunohet në këtë moment. Ju lutemi provoni përsëri." });
         }         
@@ -1056,6 +1109,21 @@ app.post('/api/inspect-car-korea', async (req, res) => {
           return res.status(200).json({ error: "Na vjen keq , nuk u gjendën mjaftueshëm të dhëna për këtë automjet !" });
       }
 
+    const discountAmount = promoDetails?.promo_discount || 0;
+    const discountedFee = Math.max(0, +(inspectionFee - discountAmount).toFixed(2));
+
+     
+    if(inspection[0].status == 'pending'){
+      await updateInspection({
+        id: inspection[0].id,
+        promo_code: promoCode || null,
+        discount: discountAmount,
+        inspection_fee: discountedFee,
+        reseller_id :  promoDetails?.id || 0,
+        commission : promoDetails?.commission_rate || 0
+      });
+    }
+
     return res.status(200).json({ 
         inspectionId: inspection[0].id, 
         message: "Inspection found.", 
@@ -1068,6 +1136,8 @@ app.post('/api/inspect-car-korea', async (req, res) => {
         brand : inspection[0].brand,
         vin_type : inspection[0].vin_type,
         vin_detail: checkCarVinData.stored_vin_data,
+        inspection_fee :discountedFee,
+        discount: discountAmount
 
       });
 
@@ -1240,7 +1310,10 @@ app.post('/api/get-inspection', async (req, res) => {
           vin : inspection.plate_number,
           inspection_case_id : inspection.inspection_case_id,
           model : inspection.model,
-          brand : inspection.brand
+          brand : inspection.brand,
+          inspection_fee :inspection.inspection_fee,
+          discount :inspection.discount,
+          promo_code :inspection.promo_code,
 
         }
         return res.status(200).json(inpsectionObj);
