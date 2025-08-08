@@ -938,6 +938,7 @@ app.post('/api/inspect-car', async (req, res) => {
     }
     const cebiaToken = await getCebiaToken();
     const carInfoResp = await vinCheck(vin, cebiaToken);
+
     if(!carInfoResp.isVinValid){
           return res.status(200).json({ error: "VIN i pavlefshëm. Ju lutem provoni me një të vlefshëm."});
     }
@@ -950,6 +951,49 @@ app.post('/api/inspect-car', async (req, res) => {
     if(!cebiaQueueResp){
         return res.status(200).json({ error: "VIN i pavlefshëm. Ju lutem provoni me një të vlefshëm."});
     }
+
+    const baseInfoDataNew = await getCebiaBasicInfo(cebiaQueueResp,cebiaToken);
+
+   const titleMap = {
+      model: "Modeli",
+      brand: "Marka",
+      mileage: "Kontrolli i kilometrazhit",
+      damages: "Kontrolli i dëmtimeve",
+      photoHistory: "Historia fotografike",
+      origin: "Origjina e automjetit",
+      equipmentList: "Lista e pajisjeve",
+      techDataList: "Të dhëna teknike",
+      
+    };
+
+    const meta = {};
+
+
+    meta['cebia_model'] = {
+      title: titleMap['model'],
+      value: carInfoResp.carInfo.model
+    };
+    meta['cebia_brand'] = {
+        title: titleMap['brand'],
+        value: carInfoResp.carInfo.brand
+    };
+
+    for (const key in baseInfoDataNew) {
+      if (baseInfoDataNew[key]?.available !== undefined) {
+        meta[`cebia_${key}`] = {
+          title: titleMap[key],
+          value: baseInfoDataNew[key].available === true ? "E disponueshme" : "Nuk është e disponueshme"
+        };
+      }
+    }
+
+  
+
+    const transformedData = {
+      meta
+    };
+
+
     
     const inspection = await getInspectionsForInspectCar(vin,email);
     
@@ -967,17 +1011,19 @@ app.post('/api/inspect-car', async (req, res) => {
             model : carInfoResp.carInfo.model,
             brand : carInfoResp.carInfo.brand,
             ip_address: ip,
-            reseller_id :  promoDetails?.id || 0,
+            reseller_id :  promoDetails?.id || null,
             promo_code: promoCode || null,
             discount: promoDetails?.promo_discount || 0,
             inspection_fee: discountedFeeNew,
-            commission : promoDetails?.commission_rate || 0
+            commission : promoDetails?.commission_rate || 0,
+            queue_id: cebiaQueueResp,
+
             
         };
         const inspectionId = await saveInspection(inspectionObj);
 
         if (inspectionId) {
-             return res.status(200).json({ inspectionId: inspectionId, message: "Inspection submitted successfully", status : 'pending',  model : carInfoResp.carInfo.model, brand :carInfoResp.carInfo.brand });
+             return res.status(200).json({ inspectionId: inspectionId, message: "Inspection submitted successfully", status : 'pending',  model : carInfoResp.carInfo.model, brand :carInfoResp.carInfo.brand, vin_detail : transformedData });
         }else{
              return res.status(401).json({ error: "Kërkesa juaj nuk mund të përpunohet në këtë moment. Ju lutemi provoni përsëri." });
         }         
@@ -996,7 +1042,8 @@ app.post('/api/inspect-car', async (req, res) => {
         discount: discountAmount,
         inspection_fee: discountedFee,
         commission : promoDetails?.commission_rate || 0,
-        reseller_id :  promoDetails?.id || 0,
+        reseller_id :  promoDetails?.id || null,
+        queue_id: cebiaQueueResp,
       });
     }
     
@@ -1009,7 +1056,10 @@ app.post('/api/inspect-car', async (req, res) => {
         ai_inspection_completed : inspection[0].ai_inspection_completed,  
         image_uploaded : inspection[0].image_uploaded,
         model : inspection[0].model, 
-        brand : inspection[0].brand 
+        brand : inspection[0].brand,
+        inspection_fee :discountedFee,
+        discount: discountAmount,
+        vin_detail : transformedData
       });
 
     
@@ -1078,7 +1128,7 @@ app.post('/api/inspect-car-korea', async (req, res) => {
             email: email,
             status: 'pending',
             vin_type: 'korea',
-            reseller_id :  promoDetails?.id || 0,
+            reseller_id :  promoDetails?.id || null,
             promo_code: promoCode || null,
             discount: promoDetails?.promo_discount || 0,
             inspection_fee: discountedFeeNew,
@@ -1119,7 +1169,7 @@ app.post('/api/inspect-car-korea', async (req, res) => {
         promo_code: promoCode || null,
         discount: discountAmount,
         inspection_fee: discountedFee,
-        reseller_id :  promoDetails?.id || 0,
+        reseller_id :  promoDetails?.id || null,
         commission : promoDetails?.commission_rate || 0
       });
     }
