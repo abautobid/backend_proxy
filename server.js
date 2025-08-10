@@ -17,6 +17,7 @@ const FormData = require('form-data');
 const fleetManager = require('./routes/fleetManager');
 const reseller = require('./routes/reseller');
 const admin = require('./routes/admin');
+const buyCar = require('./routes/buyCar');
 
 const { saveInspection,getInspectionsForInspectCar,
         getInspectionById,updateInspection, getUserById, saveCheckCarVinInspection,
@@ -88,6 +89,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/api/fleet', fleetManager);
 app.use('/api/reseller', reseller);
 app.use('/api/admin', admin);
+app.use('/api/buy-car', buyCar);
 
 
 

@@ -770,6 +770,92 @@ async function getCheckCarVinInspectionByInspectionId(inspectionId) {
 
 
 
+
+async function getCarBrands() {
+    const { data, error } = await supabase
+        .from('car_brands')
+        .select('name')
+        .order('name', { ascending: true });
+
+    if (error) {
+        console.error('Error fetching car brands:', error);
+        throw new Error('Error fetching car brands from Supabase');
+    }
+
+    // Map to array of brand names
+    return data.map(b => b.name);
+}
+
+async function getModelsByBrand() {
+    const { data, error } = await supabase
+        .from('car_brands')
+        .select(`
+            name,
+            car_models(name)
+        `)
+        .order('name', { ascending: true });
+
+    if (error) {
+        console.error('Error fetching models by brand:', error);
+        throw new Error('Error fetching models by brand from Supabase');
+    }
+
+    // Convert to { BrandName: [model1, model2, ...] }
+    const modelsByBrand = {};
+    data.forEach(brand => {
+        modelsByBrand[brand.name] = brand.car_models.map(m => m.name);
+    });
+
+    return modelsByBrand;
+}
+
+
+async function getAllBuyCars() {
+
+
+    const { data, error } = await supabase
+        .from("buy_cars")
+        .select("*");
+
+    if (error) {
+        console.error('Error fetching models by brand:', error);
+        throw new Error('Error fetching models by brand from Supabase');
+    }
+
+
+    return data;
+}
+
+
+
+/**
+ * Save a record into a Supabase table
+ * @param {string} tableName - Name of the table in Supabase
+ * @param {object} recordObj - The object to insert
+ * @returns {Promise<any>} Inserted record
+ */
+async function saveRecord(tableName, recordObj) {
+    if (!tableName || typeof tableName !== 'string') {
+        throw new Error('Invalid table name');
+    }
+    if (!recordObj || typeof recordObj !== 'object') {
+        throw new Error('Invalid record object');
+    }
+
+    const { data, error } = await supabase
+        .from(tableName)
+        .insert([recordObj])
+        .select();
+
+    if (error) {
+        console.error(`Error inserting into ${tableName}:`, error);
+        throw new Error(`Error inserting data into ${tableName}`);
+    }
+
+    return data[0]; // Return the inserted row
+}
+
+
 module.exports = {
     saveInspection,
     getInspectionList,
@@ -797,5 +883,9 @@ module.exports = {
     updateCheckCarVinInspection,
     updateAppSettings,
     getAppSettings,
-    getCheckCarVinInspectionByInspectionId
+    getCheckCarVinInspectionByInspectionId,
+    getCarBrands,
+    getModelsByBrand,
+    getAllBuyCars,
+    saveRecord
 };
