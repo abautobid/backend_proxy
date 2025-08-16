@@ -21,7 +21,10 @@ async function saveInspection(inspectionObj) {
                 commission : inspectionObj.commission,
                 model : inspectionObj.model,
                 brand : inspectionObj.brand,
-                vin_type : inspectionObj.vin_type
+                vin_type : inspectionObj.vin_type,
+                promo_code : inspectionObj.promo_code,
+                discount :  inspectionObj.discount,
+                inspection_fee : inspectionObj.inspection_fee
                 
             }
         ]).select(); ;
@@ -105,22 +108,25 @@ async function getTotalInspections() {
 }
 
 async function getTotalInspectionsByReseller(reseller_id) {
-    const { data, count, error } = await supabase
-    .from('inspections')
-    .select('*', { count: 'exact' })
-    .eq('reseller_id', reseller_id);
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+    const startOfNextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString();
 
-    const dataForSum = data;
+    const { data, count, error } = await supabase
+        .from('inspections')
+        .select('*', { count: 'exact' })
+        .eq('reseller_id', reseller_id)
+        .gte('created_at', startOfMonth)
+        .lt('created_at', startOfNextMonth); // created_at is assumed column
+
     if (error) {
-        return {totalCommission : 0,count: 0 , data : {} };
+        return { totalCommission: 0, count: 0, data: {} };
     } else {
-        const totalCommission = dataForSum.reduce((sum, row) => sum + row.commission, 0);
-        console.log('Count:', count);
-        console.log('Sum of commission:', totalCommission);
-        const totalData = {totalCommission,count , data}
-        return totalData;
+        const totalCommission = data.reduce((sum, row) => sum + row.commission, 0);
+        return { totalCommission, count, data };
     }
 }
+
 
 async function getCommissionSummaryByPeriods(reseller_id) {
   const { data, error } = await supabase
@@ -253,7 +259,7 @@ async function getInspectionsForInspectCar(plateNumber, email) {
         .select('*')
         .eq('plate_number', plateNumber)
         .eq('email', email)
-        .is('reseller_id', null)
+        .eq('created_by', 'customer') 
         .gte('created_at', new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString());
 
     if (error) {
@@ -769,6 +775,22 @@ async function getCheckCarVinInspectionByInspectionId(inspectionId) {
 }
 
 
+async function getUserByPromoCode(promoCode) {
+    const { data: user, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('promo_code', promoCode)
+        .single();
+    console.log('User:', user);
+    console.log(promoCode)
+    if (error) {
+        console.error('Error fetching user by Promo:', error);
+        return false;
+    }
+    return user;
+}
+
+
 
 
 async function getCarBrands() {
@@ -887,5 +909,6 @@ module.exports = {
     getCarBrands,
     getModelsByBrand,
     getAllBuyCars,
-    saveRecord
+    saveRecord,
+    getUserByPromoCode
 };
