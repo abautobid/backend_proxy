@@ -73,16 +73,21 @@ const iv = Buffer.from(ENCRYPTION_IV, 'hex');
 
 
 
-app.use(cors({
-  origin: ['http://localhost:3000', 'http://localhost:3001', 'https://24aba.com'],
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], // include all that you use
-  allowedHeaders: ['Content-Type', 'Authorization'], // add more if needed
-  credentials: false // set to true only if you're using cookies
-}));
+const corsOptions = {
+  origin: [
+    "http://localhost:3000",
+    "http://localhost:3001",
+    "https://24aba.com",
+  ],
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: false, // true only if using cookies/sessions
+};
 
-// Optional: handle OPTIONS requests explicitly (usually not needed with cors middleware)
-app.options('*', cors());
+// Apply CORS to all routes
+app.use(cors(corsOptions));
 
+// Explicitly handle preflight requests with the same config
 app.options("*", cors(corsOptions));
 
 
