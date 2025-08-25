@@ -83,6 +83,10 @@ app.use(cors({
 // Optional: handle OPTIONS requests explicitly (usually not needed with cors middleware)
 app.options('*', cors());
 
+app.options("*", cors(corsOptions));
+
+
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
