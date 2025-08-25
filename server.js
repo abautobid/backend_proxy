@@ -1025,7 +1025,16 @@ app.post('/api/inspect-car', async (req, res) => {
         const inspectionId = await saveInspection(inspectionObj);
 
         if (inspectionId) {
-             return res.status(200).json({ inspectionId: inspectionId, message: "Inspection submitted successfully", status : 'pending',  model : carInfoResp.carInfo.model, brand :carInfoResp.carInfo.brand, vin_detail : transformedData });
+             return res.status(200).json({ 
+                  inspectionId: inspectionId, 
+                  message: "Inspection submitted successfully", 
+                  status : 'pending',  
+                  model : carInfoResp.carInfo.model, 
+                  brand :carInfoResp.carInfo.brand, 
+                  vin_detail : transformedData,
+                  inspection_fee :discountedFeeNew,
+                  discount: discountAmountNew
+                });
         }else{
              return res.status(401).json({ error: "Kërkesa juaj nuk mund të përpunohet në këtë moment. Ju lutemi provoni përsëri." });
         }         
