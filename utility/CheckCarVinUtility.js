@@ -53,7 +53,7 @@ async function getStoreCheckedVinRaw(vin, account) {
     console.log('[*] Waiting for Cloudflare challenge to pass...');
 
     // Wait for cookies or JS challenges to resolve
-    await new Promise(resolve => setTimeout(resolve, 15000));
+    await new Promise(resolve => setTimeout(resolve, 30000));
 
 
     //const xToken = 'eyJpdiI6Ilp1Uzl5Z0RzUTltbXk0SnhRZks3QkE9PSIsInZhbHVlIjoicWZqT2hPKzdDZUtOazRCSjV1empXYk5QU2R3RWpndWRzRjBTZ2JXOStuL2dIMTBsbjFuZFNQc1N3UE13RFc3Wjl2UGxVYnFBbFdMY283QnMzeUh3OElFRXp3VFRodVVzekNOMk9KS2dCQ2hRZ05kWStlcjk3Y2hSbnpNanJVSnciLCJtYWMiOiI4OGU1NTZmNzJlZTNjMTU5ODc1ZjE2OWU2MzdiYzM4YjcwNzI5MDk3NTFjMjNiZjQ0NTEwYThmMmJlNmQ1ZDZjIiwidGFnIjoiIn0%3D';
@@ -152,7 +152,7 @@ async function payFromBalanceRaw(vin, account) {
   });
 
   console.log('[*] Waiting for Cloudflare challenge to pass...');
-  await new Promise(resolve => setTimeout(resolve, 7000));
+  await new Promise(resolve => setTimeout(resolve, 30000));
 
   const payload = {
     vin,
@@ -238,7 +238,7 @@ async function checkReportStatusRaw({ vin, user_id, reports, intent = "", cnt = 
   });
 
   console.log('[*] Waiting for Cloudflare challenge to pass...');
-  await new Promise(resolve => setTimeout(resolve, 7000));
+  await new Promise(resolve => setTimeout(resolve, 30000));
 
   const payload = {
     vin,
@@ -381,7 +381,7 @@ async function downloadCheckCarVinPdf(reportIdRaw) {
   });
 
   console.log('[*] Waiting for Cloudflare challenge to pass...');
-  await new Promise(resolve => setTimeout(resolve, 9000));
+  await new Promise(resolve => setTimeout(resolve, 30000));
 
 
   console.log('[*] Downloading PDF inside browser context...');
