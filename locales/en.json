@@ -1,0 +1,41 @@
+{
+"email_required": "Email is required",
+  "vin_required": "VIN is required",
+  "invalid_promo": "Promo code is not valid.",
+  "invalid_vin": "Invalid VIN. Please try with a valid one.",
+  "inspection_submitted": "Inspection submitted successfully",
+  "inspection_not_processed": "Your request cannot be processed at this time. Please try again.",
+  "inspection_found": "Inspection found.",
+  "available": "Available",
+  "not_available": "Not available",
+  "insufficient_data": "Sorry, not enough data was found for this vehicle!",
+  "request_failed": "Your request cannot be processed at this time. Please try again.",
+  "server_error": "Your request cannot be processed at this time. Please try again.",
+  "titleMap": {
+    "model": "Model",
+    "brand": "Brand",
+    "mileage": "Mileage check",
+    "damages": "Damage check",
+    "photoHistory": "Photo history",
+    "origin": "Vehicle origin",
+    "equipmentList": "Equipment list",
+    "techDataList": "Technical data"
+  },
+  "email_report": {
+    "subject": "🚗 Your Inspection Link is Ready!",
+    "greeting": "Hello,",
+    "thanks": "Thank you for completing your payment!",
+    "ready": "Your car inspection is now ready. Click the button below to begin:",
+    "button": "Open Full Report",
+    "alt_text": "If the button doesn't work, you can also click or paste this link:",
+    "team": "– 24ABA Team"
+  },
+  "email_korea_report": {
+    "subject": "🚗 Your inspection link is ready!",
+    "greeting": "Hello,",
+    "thankYou": "Thank you for completing your payment!",
+    "readyMessage": "Your car inspection report is now ready. Click the button below to view:",
+    "openReport": "Open Full Report {{vin}}",
+    "linkMessage": "If the button doesn’t work, click or copy this link:"
+  }
+}

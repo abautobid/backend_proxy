@@ -1,0 +1,41 @@
+{
+  "email_required": "Emaili është i detyrueshëm",
+  "vin_required": "VIN është i detyrueshëm",
+  "invalid_promo": "Kodi promovues nuk është i vlefshëm.",
+  "invalid_vin": "VIN i pavlefshëm. Ju lutem provoni me një të vlefshëm.",
+  "inspection_submitted": "Kontrolli u dërgua me sukses",
+  "inspection_not_processed": "Kërkesa juaj nuk mund të përpunohet në këtë moment. Ju lutemi provoni përsëri.",
+  "inspection_found": "Kontrolli u gjet.",
+  "available": "E disponueshme",
+  "not_available": "Nuk është e disponueshme",
+  "insufficient_data": "Na vjen keq , nuk u gjendën mjaftueshëm të dhëna për këtë automjet !",
+  "request_failed": "Kërkesa juaj nuk mund të përpunohet në këtë moment. Ju lutemi provoni përsëri.",
+  "server_error": "Kërkesa juaj nuk mund të përpunohet në këtë moment. Ju lutemi provoni përsëri.",
+  "titleMap": {
+    "model": "Modeli",
+    "brand": "Marka",
+    "mileage": "Kontrolli i kilometrazhit",
+    "damages": "Kontrolli i dëmtimeve",
+    "photoHistory": "Historia fotografike",
+    "origin": "Origjina e automjetit",
+    "equipmentList": "Lista e pajisjeve",
+    "techDataList": "Të dhëna teknike"
+  },
+  "email_report": {
+    "subject": "🚗 Linku i Inspektimit është Gati!",
+    "greeting": "Përshëndetje,",
+    "thanks": "Faleminderit që përfunduat pagesën tuaj!",
+    "ready": "Kontrolli i makinës tuaj tani është gati. Klikoni butonin më poshtë për të filluar:",
+    "button": "Hap Raportin e Plotë",
+    "alt_text": "Nëse butoni nuk funksionon, mund të klikoni ose ngjisni këtë lidhje:",
+    "team": "– Ekipi 24ABA"
+  },
+  "email_korea_report": {
+    "subject": "🚗 Link juaj për inspektimin është gati!",
+    "greeting": "Përshëndetje,",
+    "thankYou": "Faleminderit për përfundimin e pagesës!",
+    "readyMessage": "Inspektimi i makinës suaj është tani gati. Klikoni butonin më poshtë për të filluar:",
+    "openReport": "Hap Raportin e Plotë {{vin}}",
+    "linkMessage": "Nëse butoni nuk funksionon, mund të klikoni ose kopjoni këtë link:"
+  }
+}

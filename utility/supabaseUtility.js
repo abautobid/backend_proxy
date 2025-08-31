@@ -24,7 +24,8 @@ async function saveInspection(inspectionObj) {
                 vin_type : inspectionObj.vin_type,
                 promo_code : inspectionObj.promo_code,
                 discount :  inspectionObj.discount,
-                inspection_fee : inspectionObj.inspection_fee
+                inspection_fee : inspectionObj.inspection_fee,
+                lang : inspectionObj.lang
                 
             }
         ]).select(); ;
