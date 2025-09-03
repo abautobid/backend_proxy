@@ -12,6 +12,8 @@ const DAILY_LIMIT = parseInt(process.env.CHECKCARVIN_DAILY_LIMIT || '15', 10);
 
 
 
+
+
 async function getCheckCarVinToken() {
     const token = await getAppSettings('check_car_vin_token');
 
@@ -455,6 +457,182 @@ function removeNullChars(obj) {
 
 
 
+
+async function generateTokensForAllAccounts() {
+  const { data: accounts, error } = await supabase
+    .from('checkcarvin_accounts')
+    .select('id, email, password');
+
+  if (error || !accounts) {
+    console.error('Failed to fetch accounts:', error?.message);
+    return;
+  }
+
+  for (const account of accounts) {
+    console.log(`[*] Logging in: ${account.email}`);
+
+    let browser;
+    try {
+      // Configure browser for Render.com with proper args
+      browser = await puppeteer.launch({
+        headless: 'new',
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-gpu',
+          '--disable-web-security',
+          '--disable-features=IsolateOrigins,site-per-process',
+          '--disable-blink-features=AutomationControlled',
+          '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36',
+          '--window-size=1920,1080',
+          '--lang=en-US,en;q=0.9'
+        ],
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+      });
+
+      const page = await browser.newPage();
+      
+      // Set viewport and user agent
+      await page.setViewport({ width: 1920, height: 1080 });
+      await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36');
+      
+      // Set extra headers to mimic real browser
+      await page.setExtraHTTPHeaders({
+        'accept-language': 'en-US,en;q=0.9',
+        'sec-ch-ua': '"Not;A=Brand";v="99", "Google Chrome";v="139", "Chromium";v="139"',
+        'sec-ch-ua-mobile': '?0',
+        'sec-ch-ua-platform': '"Windows"',
+      });
+
+      // Block unnecessary resources to speed up loading
+      await page.setRequestInterception(true);
+      page.on('request', (req) => {
+        if (['image', 'stylesheet', 'font', 'media'].includes(req.resourceType())) {
+          req.abort();
+        } else {
+          req.continue();
+        }
+      });
+
+      console.log('Navigating to checkcar.vin...');
+      
+      // Navigate to the main site first
+      await page.goto('https://checkcar.vin/', {
+        waitUntil: 'networkidle0',
+        timeout: 60000
+      });
+
+      // Wait for potential Cloudflare challenge
+      await page.waitForTimeout(8000);
+
+      // Check if we're on a Cloudflare challenge page
+      const pageContent = await page.content();
+      if (pageContent.includes('cloudflare') || pageContent.includes('challenge')) {
+        console.log('Cloudflare challenge detected, waiting longer...');
+        await page.waitForTimeout(15000);
+        
+        // Try to reload if still on challenge page
+        if (await page.$('#challenge-form')) {
+          await page.reload({ waitUntil: 'networkidle0', timeout: 60000 });
+          await page.waitForTimeout(10000);
+        }
+      }
+
+      console.log('Attempting login via API...');
+      
+      // Execute the login request directly in browser context
+      const loginResult = await page.evaluate(async (accountData) => {
+        try {
+          const response = await fetch('https://api.checkcar.vin/api/v1/auth/login', {
+            method: 'POST',
+            headers: {
+              'accept': 'application/json, text/plain, */*',
+              'accept-language': 'en-US,en;q=0.9',
+              'authorization': 'Bearer 46q2HXB30a0aVko7FHM8pIlKD4XjuyEL',
+              'content-type': 'application/json',
+              'priority': 'u=1, i',
+              'sec-ch-ua': '"Not;A=Brand";v="99", "Google Chrome";v="139", "Chromium";v="139"',
+              'sec-ch-ua-mobile': '?0',
+              'sec-ch-ua-platform': '"Windows"',
+              'sec-fetch-dest': 'empty',
+              'sec-fetch-mode': 'cors',
+              'sec-fetch-site': 'same-site',
+              'x-client-system-locale': 'null',
+              'x-forwarded-for': '2400:adc1:4bc:8000:ed9a:cdd3:95eb:3637',
+              'x-request-country-code': 'eu',
+              'x-request-locale': 'en',
+              'referer': 'https://checkcar.vin/'
+            },
+            credentials: 'include',
+            body: JSON.stringify({
+              email: accountData.email,
+              password: accountData.password,
+              device_name: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36'
+            })
+          });
+
+          const data = await response.json();
+          return { 
+            success: response.ok, 
+            data, 
+            status: response.status,
+            headers: Object.fromEntries([...response.headers.entries()])
+          };
+        } catch (error) {
+          return { success: false, error: error.message };
+        }
+      }, account);
+
+      console.log(`Login response status: ${loginResult.status}`);
+      
+      if (!loginResult.success || !loginResult.data?.token) {
+        console.error(`[!] Login failed for ${account.email}:`, loginResult.error || loginResult.data);
+        
+        // Take screenshot for debugging
+        await page.screenshot({ path: `debug-${account.email.replace('@', '-')}.png` });
+        continue;
+      }
+
+      // Get cookies from the browser session
+      const cookies = await page.cookies();
+      const xsrfTokenCookie = cookies.find(c => c.name === 'XSRF-TOKEN');
+
+      console.log(`Login successful for ${account.email}, updating database...`);
+
+      // Update database
+      const { error: updateError } = await supabase
+        .from('checkcarvin_accounts')
+        .update({
+          token: loginResult.data.token,
+          xsrf_token: xsrfTokenCookie ? xsrfTokenCookie.value : null,
+          token_generated_at: new Date().toISOString(),
+        })
+        .eq('id', account.id);
+
+      if (updateError) {
+        console.error(`[!] Failed to update token for ${account.email}:`, updateError.message);
+      } else {
+        console.log(`[+] Token updated for ${account.email}`);
+      }
+
+      await logCheckCarVinRequest({
+        url: 'auth/login',
+        request: { email: account.email },
+        response: loginResult.data,
+      });
+
+    } catch (error) {
+      console.error(`[!] Error processing ${account.email}:`, error.message);
+    } finally {
+      if (browser) {
+        await browser.close();
+      }
+      // Add delay between accounts to avoid rate limiting
+      await new Promise(resolve => setTimeout(resolve, 5000));
+    }
+  }
+}
 
 async function generateTokensForAllAccounts() {
   const { data: accounts, error } = await supabase
