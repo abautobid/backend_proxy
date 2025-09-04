@@ -28,7 +28,12 @@ const { sendEmailReport, isValidPdf} = require('./utility/helper');
 const { getPayedDataQuery,vinCheck} = require('./utility/cebiaUtility');
 const { getStoreCheckedVin, payFromBalanceRaw,checkReportStatusRaw, 
         generateTokensForAllAccounts,downloadCheckCarVinPdf, removeNullChars,
-         incrementAccountUsage, getLatestTokenAccount,getAvailableAccount} = require('./utility/CheckCarVinUtility');
+         incrementAccountUsage, getLatestTokenAccount,getAvailableAccount,
+        
+        generateTokensForAllAccountsV2
+        } = require('./utility/CheckCarVinUtility');
+
+         
 const { supabase } = require('./lib/supabaseClient.js');
 
 const { extractVehicleData } = require('./utility/checkCarVinPDFParser');
@@ -1799,7 +1804,7 @@ app.post('/api/parse-report-check-car-vin', async (req, res) => {
 
 app.post('/api/login-check-car-vin', async (req, res) => {
   try {
-      await generateTokensForAllAccounts();
+      await generateTokensForAllAccountsV2();
   } catch (error) {
     console.error('Error inspection:', error.response?.data || error.message);
     res.status(500).json({ error: 'Invalid request.' });

@@ -90,7 +90,7 @@ async function getStoreCheckedVinRaw(vin, account) {
 
 async function getStoreCheckedVin(vin, account) {
   
-    let resp = await getStoreCheckedVinRaw(vin, account);
+    let resp = await getStoreCheckedVinRawV2(vin, account);
 
     // Check if it's a stringified JSON object and parse it
     if (typeof resp === 'string') {
@@ -642,6 +642,96 @@ async function getLatestTokenAccount() {
   return account;
 }
 
+/* CheckCar.Vin API used through API Forwarder */
+
+async function generateTokensForAllAccountsV2() {
+  const { data: accounts, error } = await supabase
+    .from("checkcarvin_accounts")
+    .select("id, email, password");
+
+  if (error || !accounts) {
+    console.error("Failed to fetch accounts:", error?.message);
+    return;
+  }
+
+  for (const account of accounts) {
+    console.log(`[*] Logging in via PHP API: ${account.email}`);
+
+    try {
+      // Call your PHP login API
+      const res = await fetch("https://fwd.24aba.com/login.php", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        body: new URLSearchParams({
+          username: account.email,
+          password: account.password
+        })
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.token) {
+        console.error(`[!] Login failed for ${account.email}:`, data);
+        continue;
+      }
+
+      const { token, raw } = data;
+      const xsrfToken = raw?.xsrf_token || null;
+
+      // Update Supabase
+      const { error: updateError } = await supabase
+        .from("checkcarvin_accounts")
+        .update({
+          token,
+          xsrf_token: xsrfToken,
+          token_generated_at: new Date().toISOString(),
+        })
+        .eq("id", account.id);
+
+      if (updateError) {
+        console.error(`[!] Failed to update token for ${account.email}:`, updateError.message);
+      } else {
+        console.log(`[+] Token updated for ${account.email}`);
+      }
+
+      // Optional logging
+      await logCheckCarVinRequest({
+        url: "auth/login",
+        request: { email: account.email },
+        response: data,
+      });
+
+    } catch (err) {
+      console.error(`[!] Error logging in ${account.email}:`, err.message);
+    }
+  }
+}
+
+
+async function getStoreCheckedVinRawV2(vin, account) {
+  try {
+    const response = await fetch("https://fwd.24aba.com/pre-report.php", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        vin: vin,
+        token: account.token,
+        xsrf_token: account.xsrf_token,
+      }),
+    });
+
+    const data = await response.json();
+    return data.response;
+  } catch (err) {
+    console.error("[!] Error calling storeCheckedVin.php:", err);
+    return { status: 500, error: err.message };
+  }
+}
+
 
 module.exports = {
     getCheckCarVinToken,
@@ -654,5 +744,9 @@ module.exports = {
     generateTokensForAllAccounts,
     getAvailableAccount,
     incrementAccountUsage,
-    getLatestTokenAccount
+    getLatestTokenAccount,
+
+    generateTokensForAllAccountsV2,
+    getStoreCheckedVinRawV2
+
 };
