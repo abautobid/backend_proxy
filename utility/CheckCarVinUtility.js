@@ -733,6 +733,117 @@ async function getStoreCheckedVinRawV2(vin, account) {
 }
 
 
+async function payFromBalanceRawV2(vin, account) {
+  const response = await fetch("http://fwd.24aba.com/initiate-report.php", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+       vin : vin,
+      email: account.email,
+      token: account.token,
+      xsrf_token: account.xsrf_token
+      }),
+    });
+  console.log({
+       vin : vin,
+      email: account.email,
+      token: account.token,
+      xsrf_token: account.xsrf_token
+      });
+  const data = await response.json();
+  console.log(data)
+  await logCheckCarVinRequest({
+    url: "api/v1/dashboard/pay-from-balance",
+    request: { vin, email: account.email },
+    response: data
+  });
+
+  return data.response;
+}
+
+
+
+async function checkReportStatusRawV2({ vin, user_id, reports, intent = "", cnt = 1 }) {
+  try {
+    
+    const auth_token_report = await getCheckCarVinReportToken();
+    const token = `Bearer ${auth_token_report}`;
+    const xToken = await getCheckCarVinXSRFToken();
+
+    console.log(auth_token_report);
+
+
+
+    const response = await fetch("https://fwd.24aba.com/check-report-status.php", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        vin: vin,
+        user_id : user_id,
+        report_id : reports,
+        token: auth_token_report,
+        xsrf_token: xToken
+      }),
+    });
+
+    const data = await response.json();
+
+    // Optional: log request/response like before
+    await logCheckCarVinRequest({
+      url: "api/v1/report/stripe-check-status-report",
+      request: { vin, user_id, reports, intent, cnt },
+      response: data,
+    });
+
+    return data.response;
+  } catch (err) {
+    return { error: "Request failed", message: err.message };
+  }
+}
+
+
+async function downloadCheckCarVinPdfV2(reportIdRaw) {
+  const auth_token_report = await getCheckCarVinReportToken(); 
+  const xsrfToken = await getCheckCarVinXSRFToken();           
+
+  const token = `Bearer ${auth_token_report}`;
+  const reportId = reportIdRaw.replace(/-/g, "");
+
+  console.log({
+      report_id: reportIdRaw,
+      token: auth_token_report,
+      xsrf_token: xsrfToken
+    });
+  const response = await fetch("https://fwd.24aba.com/download-report.php", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      report_id: reportIdRaw,
+      token: auth_token_report,
+      xsrf_token: xsrfToken
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(`❌ Failed: ${response.status} ${response.statusText}`);
+  }
+
+  const arrayBuffer = await response.arrayBuffer();
+  const buffer = Buffer.from(arrayBuffer);
+
+  // Save to disk
+  const filePath = path.resolve(__dirname, `../uploads/${reportId}.pdf`);
+  fs.writeFileSync(filePath, buffer);
+
+  console.log(`✅ PDF saved at ${filePath}`);
+  return filePath;
+}
+
+
 module.exports = {
     getCheckCarVinToken,
     getStoreCheckedVin,
@@ -747,6 +858,9 @@ module.exports = {
     getLatestTokenAccount,
 
     generateTokensForAllAccountsV2,
-    getStoreCheckedVinRawV2
+    getStoreCheckedVinRawV2,
+    payFromBalanceRawV2,
+    checkReportStatusRawV2,
+    downloadCheckCarVinPdfV2
 
 };

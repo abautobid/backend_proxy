@@ -30,7 +30,7 @@ const { getStoreCheckedVin, payFromBalanceRaw,checkReportStatusRaw,
         generateTokensForAllAccounts,downloadCheckCarVinPdf, removeNullChars,
          incrementAccountUsage, getLatestTokenAccount,getAvailableAccount,
         
-        generateTokensForAllAccountsV2
+        generateTokensForAllAccountsV2,payFromBalanceRawV2, checkReportStatusRawV2,downloadCheckCarVinPdfV2
         } = require('./utility/CheckCarVinUtility');
 
          
@@ -1563,7 +1563,7 @@ app.post('/api/generate-check-car-vin', async (req, res) => {
         return res.status(200).json({message: 'No available account with daily limit remaining' });
       }else{
       
-        const resp = await payFromBalanceRaw(result.vin, account);
+        const resp = await payFromBalanceRawV2(result.vin, account);
 
         if (
           resp &&
@@ -1600,14 +1600,15 @@ app.post('/api/generate-check-car-vin', async (req, res) => {
     }
 
 
+
     const result2 = await getInspectKoreaByStatus('report initiated');
 
 
     if (result2 && result2.initiate_report && !result2.report_generated) {
-      const resp2 = await checkReportStatusRaw({
+      const resp2 = await checkReportStatusRawV2({
         vin: result2.vin,
         user_id: result2.checkcarvin_user_id,
-        reports: [result2.report_id]
+        reports: result2.report_id
       });
 
       if (
@@ -1663,7 +1664,7 @@ app.post('/api/report-status-check-car-vin', async (req, res) => {
       const diffMinutes = diffMs / (1000 * 60);
 
       if (diffMinutes >= 5) {        
-        const resp = await downloadCheckCarVinPdf(result2.report_uuid)
+        const resp = await downloadCheckCarVinPdfV2(result2.report_uuid)
         if(resp){
           await updateInspection({
               id: result2.inspection_id,
