@@ -843,6 +843,16 @@ async function downloadCheckCarVinPdfV2(reportIdRaw) {
   fs.writeFileSync(filePath, buffer);
 
   console.log(`✅ PDF saved at ${filePath}`);
+
+  console.log(`[*] PDF saved at: ${filePath}`);
+
+  const isValid = await isValidPdf(filePath)
+  if (!isValid) {
+     console.log('❌ Skipped: Invalid PDF downloaded');
+     return false;
+  }
+
+  
   return filePath;
 }
 
