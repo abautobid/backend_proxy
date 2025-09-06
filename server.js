@@ -11,6 +11,7 @@ const crypto = require('crypto')
 const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
+const i18n = require('./utility/i18n');
 
 const FormData = require('form-data');
 
@@ -87,8 +88,7 @@ app.use(cors({
 
 // Optional: handle OPTIONS requests explicitly (usually not needed with cors middleware)
 app.options('*', cors());
-
-
+app.use(i18n.init);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -928,158 +928,137 @@ app.post('/api/login', async (req, res) => {
 
 app.post('/api/inspect-car', async (req, res) => {
   try {
-    const { email, vin, promoCode} = req.body;
-    if (!email) return res.status(400).json({ error: "Email is required" });
-    if (!vin) return res.status(400).json({ error: "VIN is required" });
+    const { email, vin, promoCode } = req.body;
+    const { lang  } = req.query;
 
+    if (!email) {
+      return res.status(400).json({ error: req.__('email_required') });
+    }
+    if (!vin) {
+      return res.status(400).json({ error: req.__('vin_required') });
+    }
 
     const inspectionFee = 24.99;
-
     let promoDetails = null;
 
-
-    if(promoCode){
+    if (promoCode) {
       promoDetails = await getUserByPromoCode(promoCode);
       if (!promoDetails) {
-          return res.status(200).json({ error: "Kodi promovues nuk është i vlefshëm."});
+        return res.status(200).json({ error: req.__('invalid_promo') });
       }
     }
+
     const cebiaToken = await getCebiaToken();
     const carInfoResp = await vinCheck(vin, cebiaToken);
 
-    if(!carInfoResp.isVinValid){
-          return res.status(200).json({ error: "VIN i pavlefshëm. Ju lutem provoni me një të vlefshëm."});
-    }
-    const cebiaQueueResp = await getCebiaBasicInfoQueueId(vin,cebiaToken);
-    
-    if(cebiaQueueResp.error){
-        return res.status(200).json({ error: "VIN i pavlefshëm. Ju lutem provoni me një të vlefshëm."});
+    if (!carInfoResp.isVinValid) {
+      return res.status(200).json({ error: req.__('invalid_vin') });
     }
 
-    if(!cebiaQueueResp){
-        return res.status(200).json({ error: "VIN i pavlefshëm. Ju lutem provoni me një të vlefshëm."});
+    const cebiaQueueResp = await getCebiaBasicInfoQueueId(vin, cebiaToken);
+
+    if (cebiaQueueResp?.error || !cebiaQueueResp) {
+      return res.status(200).json({ error: req.__('invalid_vin') });
     }
 
-    const baseInfoDataNew = await getCebiaBasicInfo(cebiaQueueResp,cebiaToken);
+    const baseInfoDataNew = await getCebiaBasicInfo(cebiaQueueResp, cebiaToken);
 
-   const titleMap = {
-      model: "Modeli",
-      brand: "Marka",
-      mileage: "Kontrolli i kilometrazhit",
-      damages: "Kontrolli i dëmtimeve",
-      photoHistory: "Historia fotografike",
-      origin: "Origjina e automjetit",
-      equipmentList: "Lista e pajisjeve",
-      techDataList: "Të dhëna teknike",
-      
-    };
+    // ✅ Localized title map
+    const titleMap = req.__('titleMap');
 
     const meta = {};
-
-
     meta['cebia_model'] = {
       title: titleMap['model'],
       value: carInfoResp.carInfo.model
     };
     meta['cebia_brand'] = {
-        title: titleMap['brand'],
-        value: carInfoResp.carInfo.brand
+      title: titleMap['brand'],
+      value: carInfoResp.carInfo.brand
     };
 
     for (const key in baseInfoDataNew) {
       if (baseInfoDataNew[key]?.available !== undefined) {
         meta[`cebia_${key}`] = {
           title: titleMap[key],
-          value: baseInfoDataNew[key].available === true ? "E disponueshme" : "Nuk është e disponueshme"
+          value: baseInfoDataNew[key].available === true ? req.__('available') : req.__('not_available')
         };
       }
     }
 
-  
+    const transformedData = { meta };
 
-    const transformedData = {
-      meta
-    };
+    const inspection = await getInspectionsForInspectCar(vin, email);
 
-
-    
-    const inspection = await getInspectionsForInspectCar(vin,email);
-    
     if (!inspection || inspection.length === 0) {
+      const ip = req.headers['x-forwarded-for']?.split(',')[0] || req.socket?.remoteAddress || null;
 
-        const ip = req.headers['x-forwarded-for']?.split(',')[0] || req.socket?.remoteAddress || null;
+      const discountAmountNew = promoDetails?.promo_discount || 0;
+      const discountedFeeNew = Math.max(0, +(inspectionFee - discountAmountNew).toFixed(2));
 
-        const discountAmountNew = promoDetails?.promo_discount || 0;
-        const discountedFeeNew = Math.max(0, +(inspectionFee - discountAmountNew).toFixed(2));
+      const inspectionObj = {
+        plate_number: vin,
+        email: email,
+        status: 'pending',
+        model: carInfoResp.carInfo.model,
+        brand: carInfoResp.carInfo.brand,
+        ip_address: ip,
+        reseller_id: promoDetails?.id || null,
+        promo_code: promoCode || null,
+        discount: promoDetails?.promo_discount || 0,
+        inspection_fee: discountedFeeNew,
+        commission: promoDetails?.commission_rate || 0,
+        queue_id: cebiaQueueResp,
+         lang: lang,
+      };
 
-         const inspectionObj = {
-            plate_number: vin,
-            email: email,
-            status: 'pending',
-            model : carInfoResp.carInfo.model,
-            brand : carInfoResp.carInfo.brand,
-            ip_address: ip,
-            reseller_id :  promoDetails?.id || null,
-            promo_code: promoCode || null,
-            discount: promoDetails?.promo_discount || 0,
-            inspection_fee: discountedFeeNew,
-            commission : promoDetails?.commission_rate || 0,
-            queue_id: cebiaQueueResp,
+      const inspectionId = await saveInspection(inspectionObj);
 
-            
-        };
-        const inspectionId = await saveInspection(inspectionObj);
-
-        if (inspectionId) {
-             return res.status(200).json({ 
-                  inspectionId: inspectionId, 
-                  message: "Inspection submitted successfully", 
-                  status : 'pending',  
-                  model : carInfoResp.carInfo.model, 
-                  brand :carInfoResp.carInfo.brand, 
-                  vin_detail : transformedData,
-                  inspection_fee :discountedFeeNew,
-                  discount: discountAmountNew
-                });
-        }else{
-             return res.status(401).json({ error: "Kërkesa juaj nuk mund të përpunohet në këtë moment. Ju lutemi provoni përsëri." });
-        }         
-
+      if (inspectionId) {
+        return res.status(200).json({
+          inspectionId,
+          message: req.__('inspection_submitted'),
+          status: 'pending',
+          model: carInfoResp.carInfo.model,
+          brand: carInfoResp.carInfo.brand,
+          vin_detail: transformedData,
+          inspection_fee: discountedFeeNew,
+          discount: discountAmountNew
+        });
+      } else {
+        return res.status(401).json({ error: req.__('inspection_not_processed') });
+      }
     }
 
-
-    
     const discountAmount = promoDetails?.promo_discount || 0;
     const discountedFee = Math.max(0, +(inspectionFee - discountAmount).toFixed(2));
 
-  if(inspection[0].status == 'pending'){
+    if (inspection[0].status == 'pending') {
       await updateInspection({
         id: inspection[0].id,
         promo_code: promoCode || null,
         discount: discountAmount,
         inspection_fee: discountedFee,
-        commission : promoDetails?.commission_rate || 0,
-        reseller_id :  promoDetails?.id || null,
+        commission: promoDetails?.commission_rate || 0,
+        reseller_id: promoDetails?.id || null,
         queue_id: cebiaQueueResp,
+         lang: lang,
       });
     }
-    
-    return res.status(200).json({ 
-        inspectionId: inspection[0].id, 
-        message: "Inspection found.", 
-        status : inspection[0].status, 
-        skip_ai : inspection[0].skip_ai,  
-        cebia_coupon_number : inspection[0].cebia_coupon_number,  
-        ai_inspection_completed : inspection[0].ai_inspection_completed,  
-        image_uploaded : inspection[0].image_uploaded,
-        model : inspection[0].model, 
-        brand : inspection[0].brand,
-        inspection_fee :discountedFee,
-        discount: discountAmount,
-        vin_detail : transformedData
-      });
 
-    
+    return res.status(200).json({
+      inspectionId: inspection[0].id,
+      message: req.__('inspection_found'),
+      status: inspection[0].status,
+      skip_ai: inspection[0].skip_ai,
+      cebia_coupon_number: inspection[0].cebia_coupon_number,
+      ai_inspection_completed: inspection[0].ai_inspection_completed,
+      image_uploaded: inspection[0].image_uploaded,
+      model: inspection[0].model,
+      brand: inspection[0].brand,
+      inspection_fee: discountedFee,
+      discount: discountAmount,
+      vin_detail: transformedData
+    });
 
   } catch (error) {
     console.error('Error creating inspection:', error.response?.data || error.message);
@@ -1089,132 +1068,130 @@ app.post('/api/inspect-car', async (req, res) => {
 
 
 
+
 app.post('/api/inspect-car-korea', async (req, res) => {
   try {
-    const { email, vin, promoCode} = req.body;
-    if (!email) return res.status(400).json({ error: "Email is required" });
-    if (!vin) return res.status(400).json({ error: "VIN is required" });
+    const { email, vin, promoCode } = req.body;
+    const { lang  } = req.query;
+
+    if (!email) return res.status(400).json({ error: req.__('email_required') });
+    if (!vin) return res.status(400).json({ error: req.__('vin_required') });
 
     const inspectionFee = 24.99;
-
     let promoDetails = null;
 
-
-    if(promoCode){
+    if (promoCode) {
       promoDetails = await getUserByPromoCode(promoCode);
       if (!promoDetails) {
-          return res.status(200).json({ error: "Kodi promovues nuk është i vlefshëm."});
+        return res.status(200).json({ error: req.__('invalid_promo') });
       }
     }
-    
-    const inspection = await getInspectionsForInspectCar(vin,email);
-    
-   
-      
-    if (!inspection || inspection.length === 0) {
 
+    const inspection = await getInspectionsForInspectCar(vin, email);
+
+    // If no existing inspection
+    if (!inspection || inspection.length === 0) {
       const account = await getLatestTokenAccount();
 
       if (!account) {
-          console.warn('No valid account with token found.');
-          return res.status(200).json({ error: "VIN i pavlefshëm. Ju lutem provoni me një të vlefshëm." });
+        console.warn('No valid account with token found.');
+        return res.status(200).json({ error: req.__('invalid_vin') });
       }
-      
-       const checkCarVin = await getStoreCheckedVin(vin, account);
 
-        if(!checkCarVin.vehicle){
-            return res.status(200).json({ error: "VIN i pavlefshëm. Ju lutem provoni me një të vlefshëm." });
-        }
+      const checkCarVin = await getStoreCheckedVin(vin, account);
 
-        if(checkCarVin.vehicle == '-'){
-            return res.status(200).json({ error: "VIN i pavlefshëm. Ju lutem provoni me një të vlefshëm." });
-        }
+      if (!checkCarVin.vehicle || checkCarVin.vehicle === '-') {
+        return res.status(200).json({ error: req.__('invalid_vin') });
+      }
 
+      if (checkCarVin.meta.year.value === '-' || checkCarVin.meta.year.value < 2000) {
+        return res.status(200).json({ error: req.__('insufficient_data') });
+      }
 
-        if(checkCarVin.meta.year.value == "-" || checkCarVin.meta.year.value  < 2000 ){
-            return res.status(200).json({ error: "Na vjen keq , nuk u gjendën mjaftueshëm të dhëna për këtë automjet !" });
-        }
+      const discountAmountNew = promoDetails?.promo_discount || 0;
+      const discountedFeeNew = Math.max(0, +(inspectionFee - discountAmountNew).toFixed(2));
 
-        const discountAmountNew = promoDetails?.promo_discount || 0;
-        const discountedFeeNew = Math.max(0, +(inspectionFee - discountAmountNew).toFixed(2));
+      const inspectionObj = {
+        plate_number: vin,
+        email,
+        status: 'pending',
+        vin_type: 'korea',
+        reseller_id: promoDetails?.id || null,
+        promo_code: promoCode || null,
+        discount: promoDetails?.promo_discount || 0,
+        inspection_fee: discountedFeeNew,
+        commission: promoDetails?.commission_rate || 0,
+         lang: lang,
+      };
 
+      const inspectionId = await saveInspection(inspectionObj);
 
+      const checkCarVinInspectionObj = {
+        inspection_id: inspectionId,
+        vin,
+        stored_vin_data: checkCarVin,
+      };
 
-         const inspectionObj = {
-            plate_number: vin,
-            email: email,
-            status: 'pending',
-            vin_type: 'korea',
-            reseller_id :  promoDetails?.id || null,
-            promo_code: promoCode || null,
-            discount: promoDetails?.promo_discount || 0,
-            inspection_fee: discountedFeeNew,
-            commission : promoDetails?.commission_rate || 0        
-        };
-        const inspectionId = await saveInspection(inspectionObj);
+      await saveCheckCarVinInspection(checkCarVinInspectionObj);
 
-        const checkCarVinInspectionObj = {
-                inspection_id: inspectionId,
-                vin: vin,
-                stored_vin_data : checkCarVin
-        }
-
-        await saveCheckCarVinInspection(checkCarVinInspectionObj)
-
-        if (inspectionId) {
-             return res.status(200).json({ inspectionId: inspectionId, message: "Inspection submitted successfully", status : 'pending', vin_detail: checkCarVin, inspection_fee :discountedFeeNew, discount: promoDetails?.promo_discount || 0 });
-        }else{
-             return res.status(200).json({ error: "Kërkesa juaj nuk mund të përpunohet në këtë moment. Ju lutemi provoni përsëri." });
-        }         
-
+      if (inspectionId) {
+        return res.status(200).json({
+          inspectionId,
+          message: req.__('inspection_submitted'),
+          status: 'pending',
+          vin_detail: checkCarVin,
+          inspection_fee: discountedFeeNew,
+          discount: promoDetails?.promo_discount || 0,
+        });
+      } else {
+        return res.status(200).json({ error: req.__('request_failed') });
+      }
     }
 
-    const checkCarVinData = await getCheckCarVinInspectionByInspectionId(inspection[0].id)
-    
+    // If inspection already exists
+    const checkCarVinData = await getCheckCarVinInspectionByInspectionId(inspection[0].id);
     const vinDetail = checkCarVinData.stored_vin_data;
-      if(vinDetail.meta.year.value == "-" || vinDetail.meta.year.value  < 2000 ){
-          return res.status(200).json({ error: "Na vjen keq , nuk u gjendën mjaftueshëm të dhëna për këtë automjet !" });
-      }
+
+    if (vinDetail.meta.year.value === '-' || vinDetail.meta.year.value < 2000) {
+      return res.status(200).json({ error: req.__('insufficient_data') });
+    }
 
     const discountAmount = promoDetails?.promo_discount || 0;
     const discountedFee = Math.max(0, +(inspectionFee - discountAmount).toFixed(2));
 
-     
-    if(inspection[0].status == 'pending'){
+    if (inspection[0].status === 'pending') {
       await updateInspection({
         id: inspection[0].id,
         promo_code: promoCode || null,
         discount: discountAmount,
         inspection_fee: discountedFee,
-        reseller_id :  promoDetails?.id || null,
-        commission : promoDetails?.commission_rate || 0
+        reseller_id: promoDetails?.id || null,
+        commission: promoDetails?.commission_rate || 0,
+        lang: lang,
       });
     }
 
-    return res.status(200).json({ 
-        inspectionId: inspection[0].id, 
-        message: "Inspection found.", 
-        status : inspection[0].status, 
-        skip_ai : inspection[0].skip_ai,  
-        cebia_coupon_number : inspection[0].cebia_coupon_number,  
-        ai_inspection_completed : inspection[0].ai_inspection_completed,  
-        image_uploaded : inspection[0].image_uploaded,
-        model : inspection[0].model, 
-        brand : inspection[0].brand,
-        vin_type : inspection[0].vin_type,
-        vin_detail: checkCarVinData.stored_vin_data,
-        inspection_fee :discountedFee,
-        discount: discountAmount
-
-      });
-
-    
-
+    return res.status(200).json({
+      inspectionId: inspection[0].id,
+      message: req.__('inspection_found'),
+      status: inspection[0].status,
+      skip_ai: inspection[0].skip_ai,
+      cebia_coupon_number: inspection[0].cebia_coupon_number,
+      ai_inspection_completed: inspection[0].ai_inspection_completed,
+      image_uploaded: inspection[0].image_uploaded,
+      model: inspection[0].model,
+      brand: inspection[0].brand,
+      vin_type: inspection[0].vin_type,
+      vin_detail: checkCarVinData.stored_vin_data,
+      inspection_fee: discountedFee,
+      discount: discountAmount,
+    });
   } catch (error) {
-    console.error('Error creating inspection:', error.response?.data || error.message);
-    res.status(500).json({ error: 'Kërkesa juaj nuk mund të përpunohet në këtë moment. Ju lutemi provoni përsëri.' });
+    console.error('Error creating Korea inspection:', error.response?.data || error.message);
+    res.status(500).json({ error: req.__('server_error') });
   }
 });
+
 
 
 app.post('/api/notify-me-korea', async (req, res) => {
@@ -1289,7 +1266,9 @@ app.post('/api/payment-received', async (req, res) => {
 
 app.post('/api/skip-ai-inspection', async (req, res) => {
   try {
-    const { id } = req.body;
+    const { id} = req.body;
+    const { lang } = req.query;
+
     if (!id) return res.status(400).json({ error: "id is required" });
     
     
@@ -1304,7 +1283,7 @@ app.post('/api/skip-ai-inspection', async (req, res) => {
 
         if(inspection && inspection.status === 'completed' && inspection.cebia_coupon_number){
             const url = cebieReportUrl+inspection.cebia_coupon_number;
-            const emailSent = await sendEmailReport(inspection.email, url);
+            const emailSent = await sendEmailReport(inspection.email, url, lang);
             
             if(emailSent){
               await updateInspection({
@@ -1746,7 +1725,7 @@ app.post('/api/parse-report-check-car-vin', async (req, res) => {
         
         const shortUrl = baseUrl + `inspect-car/korea-report/?id=${inspection.id}`
         
-        sendInspectionKoreaReport({vin : inspection.plate_number, email : inspection.email, short_link : shortUrl})
+        sendInspectionKoreaReport({vin : inspection.plate_number, email : inspection.email, short_link : shortUrl, lang : inspection.lang})
 
       
         console.log("Valid JSON object");
@@ -1842,60 +1821,57 @@ app.post('/api/get-korea-report', async (req, res) => {
 });
 
 
-
-async function sendInspectionKoreaReport({ vin, email, short_link}) {
+async function sendInspectionKoreaReport({ vin, email, short_link, lang = 'sq' }) {
   if (!email) throw new Error("Email is required");
   if (!vin) throw new Error("vin is required");
   if (!short_link) throw new Error("short_link is required");
 
+  // ✅ set locale dynamically
+  i18n.setLocale(lang);
 
-  // ✅ Send inspection link by email
-    const transporter = nodemailer.createTransport({
-      service: 'gmail',
-      host: process.env.SMTP_HOST,
-      port: parseInt(process.env.SMTP_PORT),
-      secure: true,
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS
-      },
-      tls: {
-        rejectUnauthorized: false
-      },
-      logger: true,
-      debug: true
-    });
+  const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    host: process.env.SMTP_HOST,
+    port: parseInt(process.env.SMTP_PORT),
+    secure: true,
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS
+    },
+    tls: {
+      rejectUnauthorized: false
+    },
+    logger: true,
+    debug: true
+  });
 
-    const mailOptions = {
-      from: `"24ABA Inspections" <${process.env.EMAIL_USER}>`,
-      to: email,
-      subject: "🚗 Link juaj për inspektimin është gati!",
-      html: `
-        <p>Përshëndetje,</p>
-        <p>Faleminderit për përfundimin e pagesës!</p>
-        <p>Inspektimi i makinës suaj është tani gati. Klikoni butonin më poshtë për të filluar:</p>
-        <p style="text-align:center;">
-          <a href="${short_link}" style="display:inline-block;padding:12px 24px;background-color:#e60023;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:bold;">
-            Hap Raportin e Plotë ${vin}
-          </a>
-        </p>
-        <p>Nëse butoni nuk funksionon, mund të klikoni ose kopjoni këtë link:</p>
-        <p><a href="${short_link}">${short_link}</a></p>
-        <p>– Ekipi 24ABA</p>
-      `
-    };
+  const mailOptions = {
+    from: `"24ABA Inspections" <${process.env.EMAIL_USER}>`,
+    to: email,
+    subject: i18n.__("email_korea_report.subject"), // ✅ localized subject
+    html: `
+      <p>${i18n.__("email_korea_report.greeting")}</p>
+      <p>${i18n.__("email_korea_report.thankYou")}</p>
+      <p>${i18n.__("email_korea_report.readyMessage")}</p>
+      <p style="text-align:center;">
+        <a href="${short_link}" style="display:inline-block;padding:12px 24px;background-color:#e60023;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:bold;">
+          ${i18n.__("email_korea_report.openReport", { vin })}
+        </a>
+      </p>
+      <p>${i18n.__("email_korea_report.linkMessage")}</p>
+      <p><a href="${short_link}">${short_link}</a></p>
+      <p>– 24ABA</p>
+    `
+  };
 
-
-    await transporter.sendMail(mailOptions);
-    console.log("📧 Inspection link email sent to", email);
-
+  await transporter.sendMail(mailOptions);
+  console.log("📧 Inspection link email sent to", email);
 
   return true;
-
 }
 
 app.get('/api/test-email', async (req, res) => {
-   sendInspectionKoreaReport({vin : 'KMHJ3815GGU085263', email : 'ahsan.shaikh.hyd@gmail.com', short_link : 'https://24aba.com/beta-inspection/inspect-car/korea-report/?id=451673d9-13f3-42af-8896-6d4b5a65d951'})
+   sendInspectionKoreaReport({vin : 'KMHJ3815GGU085263', email : 'ahsan.shaikh.hyd@gmail.com', short_link : 'https://24aba.com/beta-inspection/inspect-car/korea-report/?id=451673d9-13f3-42af-8896-6d4b5a65d951', lang : 'sq'})
 });
 
 

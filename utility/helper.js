@@ -1,14 +1,14 @@
 const nodemailer = require('nodemailer');
 const fs = require('fs');
+const i18n  = require("./i18n");
 
+async function sendEmailReport(email, short_link, lang = "en") {
+  try {
+    // set user language
+    i18n.setLocale(lang);
 
-
-async function sendEmailReport(email, short_link) {
-   
-
-    try{
     const transporter = nodemailer.createTransport({
-      service: 'gmail',
+      service: "gmail",
       host: process.env.SMTP_HOST,
       port: parseInt(process.env.SMTP_PORT),
       secure: true,
@@ -16,42 +16,35 @@ async function sendEmailReport(email, short_link) {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS
       },
-      tls: {
-        rejectUnauthorized: false
-      },
-      logger: true,
-      debug: true
+      tls: { rejectUnauthorized: false }
     });
 
     const mailOptions = {
       from: `"24ABA Inspections" <${process.env.EMAIL_USER}>`,
       to: email,
-      subject: "🚗 Your Inspection Link is Ready!",
+      subject: i18n.__("email_report.subject"),
       html: `
-        <p>Hello,</p>
-        <p>Thank you for completing your payment!</p>
-        <p>Your car inspection is now ready. Click the button below to begin:</p>
+        <p>${i18n.__("email_report.greeting")}</p>
+        <p>${i18n.__("email_report.thanks")}</p>
+        <p>${i18n.__("email_report.ready")}</p>
         <p style="text-align:center;">
           <a href="${short_link}" style="display:inline-block;padding:12px 24px;background-color:#e60023;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:bold;">
-            Open Full Report
+            ${i18n.__("email_report.button")}
           </a>
         </p>
-        <p>If the button doesn't work, you can also click or paste this link:</p>
+        <p>${i18n.__("email_report.alt_text")}</p>
         <p><a href="${short_link}">${short_link}</a></p>
-        <p>– 24ABA Team</p>
+        <p>${i18n.__("email_report.team")}</p>
       `
     };
 
     await transporter.sendMail(mailOptions);
     console.log("📧 Inspection link email sent to", email);
-
     return true;
   } catch (error) {
-    console.error('❌ Short link error:', error.response?.data || error.message);
+    console.error("❌ Email error:", error.message);
     return false;
   }
-
-    return false;
 }
 
 async function isValidPdf(filePath) {

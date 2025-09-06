@@ -466,6 +466,96 @@ async function generateTokensForAllAccounts() {
     return;
   }
 
+  for (const account of accounts) {
+    console.log(`[*] Logging in: ${account.email}`);
+
+    try {
+      // Use the exact same headers as the working request
+      const response = await fetch("https://api.checkcar.vin/api/v1/auth/login", {
+        method: "POST",
+        headers: {
+          "accept": "application/json, text/plain, */*",
+          "accept-language": "en-US,en;q=0.9",
+          "authorization": "Bearer 46q2HXB30a0aVko7FHM8pIlKD4XjuyEL",
+          "content-type": "application/json",
+          "priority": "u=1, i",
+          "sec-ch-ua": "\"Not;A=Brand\";v=\"99\", \"Google Chrome\";v=\"139\", \"Chromium\";v=\"139\"",
+          "sec-ch-ua-mobile": "?0",
+          "sec-ch-ua-platform": "\"Windows\"",
+          "sec-fetch-dest": "empty",
+          "sec-fetch-mode": "cors",
+          "sec-fetch-site": "same-site",
+          "x-client-system-locale": "null",
+          "x-forwarded-for": "2400:adc1:4bc:8000:ed9a:cdd3:95eb:3637",
+          "x-request-country-code": "eu",
+          "x-request-locale": "en",
+          "referer": "https://checkcar.vin/"
+        },
+        body: JSON.stringify({
+          email: account.email,
+          password: account.password,
+          device_name: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36"
+        })
+      });
+
+      const data = await response.json();
+      
+      console.log(`Response status: ${response.status}`);
+      console.log(`Response data:`, data);
+
+      if (!response.ok || !data.token) {
+        console.error(`[!] Login failed for ${account.email}:`, data);
+        continue;
+      }
+
+      // Extract XSRF token from response cookies if available
+      let xsrfToken = null;
+      const setCookieHeader = response.headers.get('set-cookie');
+      if (setCookieHeader) {
+        const xsrfMatch = setCookieHeader.match(/XSRF-TOKEN=([^;]+)/);
+        if (xsrfMatch) {
+          xsrfToken = xsrfMatch[1];
+        }
+      }
+
+      const { error: updateError } = await supabase
+        .from('checkcarvin_accounts')
+        .update({
+          token: data.token,
+          xsrf_token: xsrfToken,
+          token_generated_at: new Date().toISOString(),
+        })
+        .eq('id', account.id);
+
+      if (updateError) {
+        console.error(`[!] Failed to update token for ${account.email}:`, updateError.message);
+      } else {
+        console.log(`[+] Token updated for ${account.email}`);
+      }
+
+      await logCheckCarVinRequest({
+        url: 'auth/login',
+        request: { email: account.email },
+        response: data,
+      });
+
+    } catch (error) {
+      console.error(`[!] Error processing ${account.email}:`, error.message);
+    }
+  }
+}
+
+
+async function generateTokensForAllAccountsOld() {
+  const { data: accounts, error } = await supabase
+    .from('checkcarvin_accounts')
+    .select('id, email, password');
+
+  if (error || !accounts) {
+    console.error('Failed to fetch accounts:', error?.message);
+    return;
+  }
+
   const auth_token_report = await getCheckCarVinReportToken();
   const token = `Bearer ${auth_token_report}`;
   const xToken = await getCheckCarVinXSRFToken();
