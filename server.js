@@ -1806,6 +1806,7 @@ app.post('/api/parse-report-check-car-vin', async (req, res) => {
 app.post('/api/login-check-car-vin', async (req, res) => {
   try {
       await generateTokensForAllAccountsV2();
+      res.status(200).json({ message: 'login details updated.' });
   } catch (error) {
     console.error('Error inspection:', error.response?.data || error.message);
     res.status(500).json({ error: 'Invalid request.' });
