@@ -619,7 +619,8 @@ async function getLatestTokenAccount() {
   const { data: accounts, error } = await supabase
     .from('checkcarvin_accounts')
     .select('*')
-    .order('token_generated_at', { ascending: false }) // latest token first
+    .eq('status', true) 
+    .order('token_generated_at', { ascending: false }) // latest first
     .limit(1);
 
   if (error) throw new Error('Failed to fetch latest token account: ' + error.message);
@@ -647,7 +648,8 @@ async function getLatestTokenAccount() {
 async function generateTokensForAllAccountsV2() {
   const { data: accounts, error } = await supabase
     .from("checkcarvin_accounts")
-    .select("id, email, password");
+    .select("id, email, password")
+    .eq('status', true);
 
   if (error || !accounts) {
     console.error("Failed to fetch accounts:", error?.message);
