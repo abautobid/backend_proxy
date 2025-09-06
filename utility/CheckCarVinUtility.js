@@ -551,6 +551,7 @@ async function getAvailableAccount() {
   const { data: accounts, error } = await supabase
     .from('checkcarvin_accounts')
     .select('*')
+    .eq("status", true)
     .order('last_used_at', { ascending: true });
 
   if (error) throw new Error('Failed to fetch accounts: ' + error.message);
