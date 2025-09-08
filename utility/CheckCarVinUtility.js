@@ -778,7 +778,6 @@ async function generateTokensForAllAccountsV2() {
         .from("checkcarvin_accounts")
         .update({
           token,
-          xsrf_token: xsrfToken,
           token_generated_at: new Date().toISOString(),
         })
         .eq("id", account.id);
