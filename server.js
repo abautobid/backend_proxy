@@ -19,6 +19,7 @@ const fleetManager = require('./routes/fleetManager');
 const reseller = require('./routes/reseller');
 const admin = require('./routes/admin');
 const buyCar = require('./routes/buyCar');
+const motorxRoutes = require('./routes/motorxRoutes');
 
 const { saveInspection,getInspectionsForInspectCar,
         getInspectionById,updateInspection, getUserById, saveCheckCarVinInspection,
@@ -80,7 +81,7 @@ const iv = Buffer.from(ENCRYPTION_IV, 'hex');
 
 
 app.use(cors({
-  origin: ['http://localhost:3000', 'http://localhost:3001', 'https://24aba.com'],
+  origin: ['*','http://localhost:3000', 'http://localhost:3001','http://127.0.0.1:3001', 'https://24aba.com'],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], // include all that you use
   allowedHeaders: ['Content-Type', 'Authorization'], // add more if needed
   credentials: false // set to true only if you're using cookies
@@ -97,6 +98,7 @@ app.use('/api/reseller', reseller);
 app.use('/api/admin', admin);
 app.use('/api/buy-car', buyCar);
 
+app.use('/api/motorx', motorxRoutes);
 
 
 app.get('/', (req, res) => {
@@ -1872,6 +1874,15 @@ async function sendInspectionKoreaReport({ vin, email, short_link, lang = 'sq' }
 
 app.get('/api/test-email', async (req, res) => {
    sendInspectionKoreaReport({vin : 'KMHJ3815GGU085263', email : 'ahsan.shaikh.hyd@gmail.com', short_link : 'https://24aba.com/beta-inspection/inspect-car/korea-report/?id=451673d9-13f3-42af-8896-6d4b5a65d951', lang : 'sq'})
+});
+
+
+
+app.use((req, res, next) => {
+  console.log(`${req.method} ${req.url}`);
+  console.log('Origin:', req.headers.origin);
+  console.log('Headers:', req.headers);
+  next();
 });
 
 
